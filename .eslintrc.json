@@ -1,0 +1,7 @@
+{
+  "extends": ["universe/native", "universe/shared/typescript-analysis"],
+  "plugins": [],
+  "rules": {
+    "no-console": ["warn", { "allow": ["warn", "error"] }]
+  }
+}
