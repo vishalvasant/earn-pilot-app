@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
-import { View, Text, StatusBar, StyleSheet } from 'react-native';
+import { View, StatusBar, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useAuthStore } from '../stores/authStore';
+import SplashScreen from './SplashScreen';
 import { useTheme } from '../hooks/useTheme';
 
 export default function IndexPage() {
@@ -13,7 +13,10 @@ export default function IndexPage() {
   const theme = useTheme();
 
   useEffect(() => {
-    bootstrap();
+    const timer = setTimeout(() => {
+      bootstrap();
+    }, 2500); // 2.5 seconds
+    return () => clearTimeout(timer);
   }, [bootstrap]);
 
   useEffect(() => {
@@ -26,32 +29,10 @@ export default function IndexPage() {
     }
   }, [bootstrapped, isAuthenticated, router]);
 
-  return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar 
-        barStyle={theme.background === '#ffffff' ? 'dark-content' : 'light-content'} 
-        backgroundColor={theme.background}
-      />
-      <LinearGradient
-        colors={theme.gradient.primary as [string, string, ...string[]]}
-        style={styles.gradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
-        <View style={styles.content}>
-          <Text style={styles.title}>Earn Pilot</Text>
-          <Text style={styles.subtitle}>Loading your experience...</Text>
-          
-          {/* Loading animation */}
-          <View style={styles.loadingContainer}>
-            <View style={[styles.loadingDot, styles.dot1]} />
-            <View style={[styles.loadingDot, styles.dot2]} />
-            <View style={[styles.loadingDot, styles.dot3]} />
-          </View>
-        </View>
-      </LinearGradient>
-    </View>
-  );
+  if (!bootstrapped) {
+    return <SplashScreen />;
+  }
+  return <View style={{ flex: 1, backgroundColor: theme.background }} />;
 }
 
 const styles = StyleSheet.create({

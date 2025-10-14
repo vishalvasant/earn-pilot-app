@@ -1,7 +1,4 @@
-import { useColorScheme } from 'react-native';
-import { create } from 'zustand';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect } from 'react';
+// Simplified single-theme hook: Black & Cyan palette
 
 export interface Theme {
   background: string;
@@ -22,104 +19,29 @@ export interface Theme {
     secondary: string[];
   };
 }
-
-const lightTheme: Theme = {
-  background: '#ffffff',
-  card: '#f8f9fa',
-  text: '#1a1a1a',
-  textSecondary: '#666666',
-  primary: '#6a5acd',
-  primaryLight: '#8a7fe8',
-  border: '#e1e5e9',
-  borderLight: '#f0f0f0',
-  placeholder: '#999999',
-  accent: '#ff6b6b',
-  success: '#51cf66',
-  error: '#ff6b6b',
-  warning: '#ffd43b',
+// Single Black & Cyan theme
+const blackCyanTheme: Theme = {
+  background: '#0A0A0A', // near black
+  card: '#111418', // dark card with slight blue tint
+  text: '#E6F7FA', // very light cyan-tinted text
+  textSecondary: '#9BD7E0',
+  primary: '#00E5FF', // cyan
+  primaryLight: '#00B8D4', // darker cyan
+  border: '#1B2026',
+  borderLight: '#1F252C',
+  placeholder: '#6FAAB3',
+  accent: '#14F1FF',
+  success: '#1DD1A1',
+  error: '#FF6B6B',
+  warning: '#FFD166',
   gradient: {
-    primary: ['#6a5acd', '#8a7fe8'],
-    secondary: ['#667eea', '#764ba2'],
+    // Use cyan fades for primary and a darker cyan blend for secondary
+    primary: ['#00E5FF', '#00B8D4'],
+    secondary: ['#0AA2C0', '#007A8A'],
   },
 };
 
-const darkTheme: Theme = {
-  background: '#121212',
-  card: '#1e1e1e',
-  text: '#ffffff',
-  textSecondary: '#b3b3b3',
-  primary: '#8a7fe8',
-  primaryLight: '#a294f0',
-  border: '#333333',
-  borderLight: '#2a2a2a',
-  placeholder: '#666666',
-  accent: '#ff7979',
-  success: '#00b894',
-  error: '#ff7675',
-  warning: '#fdcb6e',
-  gradient: {
-    primary: ['#8a7fe8', '#a294f0'],
-    secondary: ['#74b9ff', '#0984e3'],
-  },
-};
-
-interface ThemeState {
-  isDarkMode: boolean | null; // null means follow system
-  setDarkMode: (isDark: boolean | null) => void;
-  toggleDarkMode: () => void;
-  initializeTheme: () => Promise<void>;
-}
-
-const useThemeStore = create<ThemeState>((set, get) => ({
-  isDarkMode: null,
-  setDarkMode: async (isDark: boolean | null) => {
-    set({ isDarkMode: isDark });
-    if (isDark === null) {
-      await AsyncStorage.removeItem('theme_preference');
-    } else {
-      await AsyncStorage.setItem('theme_preference', isDark ? 'dark' : 'light');
-    }
-  },
-  toggleDarkMode: () => {
-    const { isDarkMode } = get();
-    const newMode = isDarkMode === null ? true : !isDarkMode;
-    get().setDarkMode(newMode);
-  },
-  initializeTheme: async () => {
-    try {
-      const savedTheme = await AsyncStorage.getItem('theme_preference');
-      if (savedTheme) {
-        set({ isDarkMode: savedTheme === 'dark' });
-      } else {
-        set({ isDarkMode: null });
-      }
-    } catch (error) {
-      set({ isDarkMode: null });
-    }
-  },
-}));
-
-export const useTheme = (): Theme & { 
-  isDarkMode: boolean | null; 
-  setDarkMode: (isDark: boolean | null) => void;
-  toggleDarkMode: () => void;
-} => {
-  const systemColorScheme = useColorScheme();
-  const { isDarkMode, setDarkMode, toggleDarkMode, initializeTheme } = useThemeStore();
-
-  useEffect(() => {
-    initializeTheme();
-  }, []);
-
-  // Determine effective dark mode
-  const effectiveDarkMode = isDarkMode !== null ? isDarkMode : systemColorScheme === 'dark';
-  
-  const theme = effectiveDarkMode ? darkTheme : lightTheme;
-
-  return {
-    ...theme,
-    isDarkMode,
-    setDarkMode,
-    toggleDarkMode,
-  };
+// Hook simply returns the fixed theme
+export const useTheme = (): Theme => {
+  return blackCyanTheme;
 };

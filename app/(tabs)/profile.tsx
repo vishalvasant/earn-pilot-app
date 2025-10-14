@@ -10,8 +10,8 @@ import {
   StyleSheet,
   StatusBar,
   Animated,
+  Modal,
   Switch,
-  Modal
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -198,7 +198,7 @@ export default function ProfileScreen() {
             <View style={styles.headerContent}>
               <View style={styles.avatarContainer}>
                 <LinearGradient
-                  colors={['#667eea', '#764ba2']}
+                  colors={theme.gradient.primary as [string, string, ...string[]]}
                   style={styles.avatar}
                 >
                   <Text style={styles.avatarText}>
@@ -224,9 +224,9 @@ export default function ProfileScreen() {
         {/* Stats Cards */}
         <View style={styles.statsContainer}>
           <AnimatedCard delay={200}>
-            <View style={styles.statsGrid}>
+              <View style={styles.statsGrid}>
               <View style={[styles.statCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                <LinearGradient colors={['#667eea', '#764ba2']} style={styles.statIcon}>
+                <LinearGradient colors={theme.gradient.primary as [string, string, ...string[]]} style={styles.statIcon}>
                   <Text style={styles.statIconText}>₹</Text>
                 </LinearGradient>
                 <Text style={[styles.statValue, { color: theme.text }]}>₹{userData.totalEarnings}</Text>
@@ -234,7 +234,7 @@ export default function ProfileScreen() {
               </View>
 
               <View style={[styles.statCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                <LinearGradient colors={['#f093fb', '#f5576c']} style={styles.statIcon}>
+                <LinearGradient colors={theme.gradient.secondary as [string, string, ...string[]]} style={styles.statIcon}>
                   <Text style={styles.statIconText}>✓</Text>
                 </LinearGradient>
                 <Text style={[styles.statValue, { color: theme.text }]}>{userData.tasksCompleted}</Text>
@@ -246,7 +246,7 @@ export default function ProfileScreen() {
           <AnimatedCard delay={400}>
             <View style={styles.statsGrid}>
               <View style={[styles.statCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                <LinearGradient colors={['#4facfe', '#00f2fe']} style={styles.statIcon}>
+                <LinearGradient colors={theme.gradient.primary as [string, string, ...string[]]} style={styles.statIcon}>
                   <Text style={styles.statIconText}>📊</Text>
                 </LinearGradient>
                 <Text style={[styles.statValue, { color: theme.text }]}>{userData.successRate}%</Text>
@@ -254,7 +254,7 @@ export default function ProfileScreen() {
               </View>
 
               <View style={[styles.statCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                <LinearGradient colors={['#fa709a', '#fee140']} style={styles.statIcon}>
+                <LinearGradient colors={theme.gradient.secondary as [string, string, ...string[]]} style={styles.statIcon}>
                   <Text style={styles.statIconText}>🏆</Text>
                 </LinearGradient>
                 <Text style={[styles.statValue, { color: theme.text }]}>{userData.achievements.filter(a => a.earned).length}</Text>
@@ -263,15 +263,31 @@ export default function ProfileScreen() {
             </View>
           </AnimatedCard>
         </View>
+        {/* Theme (static) */}
+        <AnimatedCard delay={800}>
+          <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.border }]}> 
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Appearance</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12 }}>
+              <LinearGradient
+                colors={theme.gradient.primary as [string, string, ...string[]]}
+                style={{ width: 28, height: 28, borderRadius: 8, marginRight: 12 }}
+              />
+              <View>
+                <Text style={{ color: theme.text, fontSize: 16, fontWeight: '600' }}>Black & Cyan</Text>
+                <Text style={{ color: theme.textSecondary, fontSize: 12 }}>Fixed theme applied across the app</Text>
+              </View>
+            </View>
+          </View>
+        </AnimatedCard>
 
-        {/* Profile Info */}
+        {/* Profile Details */}
         <AnimatedCard delay={600}>
-          <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.border }]}> 
             <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>Profile Information</Text>
-              <TouchableOpacity 
+              <Text style={[styles.sectionTitle, { color: theme.text }]}>Profile Details</Text>
+              <TouchableOpacity
                 onPress={() => setIsEditing(!isEditing)}
-                style={[styles.editButton, { borderColor: theme.primary }]}
+                style={[styles.editButton, { borderColor: theme.border }]}
               >
                 <Text style={[styles.editButtonText, { color: theme.primary }]}>
                   {isEditing ? 'Cancel' : 'Edit'}
@@ -293,16 +309,6 @@ export default function ProfileScreen() {
                 ) : (
                   <Text style={[styles.fieldValue, { color: theme.text }]}>{name}</Text>
                 )}
-              </View>
-
-              <View style={styles.field}>
-                <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Email</Text>
-                <Text style={[styles.fieldValue, { color: theme.text }]}>{userData.email}</Text>
-              </View>
-
-              <View style={styles.field}>
-                <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Phone</Text>
-                <Text style={[styles.fieldValue, { color: theme.text }]}>{userData.phone}</Text>
               </View>
 
               <View style={styles.field}>
@@ -352,7 +358,7 @@ export default function ProfileScreen() {
 
         {/* Settings */}
         <AnimatedCard delay={800}>
-          <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.border }]}> 
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Settings</Text>
             
             <View style={styles.settingsItem}>
@@ -369,33 +375,6 @@ export default function ProfileScreen() {
                 thumbColor={notifications ? '#ffffff' : theme.textSecondary}
               />
             </View>
-
-            <View style={styles.settingsItem}>
-              <View style={styles.settingsLabelContainer}>
-                <Text style={[styles.settingsLabel, { color: theme.text }]}>🌙 Dark Mode</Text>
-                <Text style={[styles.settingsSubLabel, { color: theme.textSecondary }]}>
-                  {theme.isDarkMode === null ? 'Follow system' : theme.isDarkMode ? 'Enabled' : 'Disabled'}
-                </Text>
-              </View>
-              <Switch
-                value={theme.isDarkMode !== null ? theme.isDarkMode : false}
-                onValueChange={() => theme.toggleDarkMode()}
-                trackColor={{ false: theme.border, true: theme.primary }}
-                thumbColor={theme.isDarkMode ? '#ffffff' : theme.textSecondary}
-              />
-            </View>
-
-            {theme.isDarkMode !== null && (
-              <TouchableOpacity 
-                style={[styles.resetThemeButton, { borderColor: theme.border }]}
-                onPress={() => theme.setDarkMode(null)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.resetThemeText, { color: theme.primary }]}>
-                  🔄 Follow System Theme
-                </Text>
-              </TouchableOpacity>
-            )}
           </View>
         </AnimatedCard>
 
