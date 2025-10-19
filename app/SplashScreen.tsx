@@ -6,7 +6,7 @@ const mascot = require('../assets/images/NewPilot.png');
 const { width, height } = Dimensions.get('window');
 
 // Animated reward icon component for splash screen
-function SplashRewardIcon({ icon, mascotCenter }) {
+function SplashRewardIcon({ icon, mascotCenter }: { icon: string; mascotCenter: { left: number; top: number } }) {
   const [target, setTarget] = useState({ left: mascotCenter.left, top: mascotCenter.top });
   const travelAnim = useRef(new Animated.Value(0)).current;
   

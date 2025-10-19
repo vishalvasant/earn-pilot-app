@@ -15,6 +15,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { api } from '../../services/api';
 import { useTheme } from '../../hooks/useTheme';
+import Icon from '../../components/Icon';
 
 const { width } = Dimensions.get('window');
 
@@ -259,10 +260,10 @@ const TaskCard = ({ task, index, theme }: { task: any; index: number; theme: any
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'completed': return '✅';
-      case 'in_progress': return '⏳';
-      case 'available': return '🎯';
-      default: return '📋';
+      case 'completed': return 'checkmark';
+      case 'in_progress': return 'pending';
+      case 'available': return 'target';
+      default: return 'tasks';
     }
   };
 
@@ -306,8 +307,12 @@ const TaskCard = ({ task, index, theme }: { task: any; index: number; theme: any
                 styles.taskStatus,
                 { color: task.is_completed ? theme.success : 'rgba(255, 255, 255, 0.9)' }
               ]}>
-                {getStatusIcon(task.is_completed ? 'completed' : 'available')} 
-                {task.is_completed ? 'Completed' : 'Available'}
+                <Icon 
+                  name={getStatusIcon(task.is_completed ? 'completed' : 'available')} 
+                  size={16} 
+                  color={task.is_completed ? theme.success : 'rgba(255, 255, 255, 0.9)'} 
+                />
+                {' '}{task.is_completed ? 'Completed' : 'Available'}
               </Text>
             </View>
             <View style={[
@@ -336,9 +341,11 @@ const TaskCard = ({ task, index, theme }: { task: any; index: number; theme: any
               </Text>
               {task.subtasks.slice(0, 2).map((subtask: any, idx: number) => (
                 <View key={idx} style={styles.subtaskItem}>
-                  <Text style={styles.subtaskIcon}>
-                    {subtask.is_completed ? '✅' : '⭕'}
-                  </Text>
+                  <Icon 
+                    name={subtask.is_completed ? 'checkmark' : 'pending'} 
+                    size={14} 
+                    color={subtask.is_completed ? theme.success : theme.textSecondary} 
+                  />
                   <Text style={[
                     styles.subtaskText, 
                     { 
@@ -355,12 +362,18 @@ const TaskCard = ({ task, index, theme }: { task: any; index: number; theme: any
 
           <View style={styles.taskFooter}>
             <View style={styles.taskMeta}>
-              <Text style={[styles.metaText, { color: theme.textSecondary }]}>
-                🕒 Est. {task.estimated_time || '5 min'}
-              </Text>
-              <Text style={[styles.metaText, { color: theme.textSecondary }]}>
-                🏆 Difficulty: {task.difficulty || 'Easy'}
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Icon name="time" size={14} color={theme.textSecondary} />
+                <Text style={[styles.metaText, { color: theme.textSecondary }]}>
+                  Est. {task.estimated_time || '5 min'}
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Icon name="difficulty" size={14} color={theme.textSecondary} />
+                <Text style={[styles.metaText, { color: theme.textSecondary }]}>
+                  Difficulty: {task.difficulty || 'Easy'}
+                </Text>
+              </View>
             </View>
             
             <TouchableOpacity

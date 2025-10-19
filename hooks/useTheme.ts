@@ -1,4 +1,5 @@
-// Simplified single-theme hook: Black & Cyan palette
+// Fintech Bold Theme - Professional & Trustworthy
+// Inspired by Stripe, Coinbase, and premium finance apps
 
 export interface Theme {
   background: string;
@@ -19,29 +20,31 @@ export interface Theme {
     secondary: string[];
   };
 }
-// Single Black & Cyan theme
-const blackCyanTheme: Theme = {
-  background: '#0A0A0A', // near black
-  card: '#111418', // dark card with slight blue tint
-  text: '#E6F7FA', // very light cyan-tinted text
-  textSecondary: '#9BD7E0',
-  primary: '#00E5FF', // cyan
-  primaryLight: '#00B8D4', // darker cyan
-  border: '#1B2026',
-  borderLight: '#1F252C',
-  placeholder: '#6FAAB3',
-  accent: '#14F1FF',
-  success: '#1DD1A1',
-  error: '#FF6B6B',
-  warning: '#FFD166',
+
+// Fintech Bold - Navy & Blue
+const fintechTheme: Theme = {
+  background: '#0A1F44', // Deep navy (trustworthy)
+  card: '#0F2954', // Navy blue card
+  text: '#F8FAFC', // Soft white (Slate 50)
+  textSecondary: '#94A3B8', // Cool gray (Slate 400)
+  primary: '#3B82F6', // Electric blue (confident)
+  primaryLight: '#60A5FA', // Light blue (Blue 400)
+  border: '#1E3A5F', // Navy border
+  borderLight: '#2A4A6F', // Lighter navy border
+  placeholder: '#64748B', // Muted gray (Slate 500)
+  accent: '#60A5FA', // Bright blue accent
+  success: '#10B981', // Clean green (Emerald 500)
+  error: '#EF4444', // Clean red (Red 500)
+  warning: '#F59E0B', // Amber (Amber 500)
   gradient: {
-    // Use cyan fades for primary and a darker cyan blend for secondary
-    primary: ['#00E5FF', '#00B8D4'],
-    secondary: ['#0AA2C0', '#007A8A'],
+    // Blue gradient - professional
+    primary: ['#3B82F6', '#2563EB', '#1D4ED8'],
+    // Navy to blue - depth
+    secondary: ['#1E3A8A', '#1E40AF', '#3B82F6'],
   },
 };
 
-// Hook simply returns the fixed theme
+// Returns the professional Fintech theme
 export const useTheme = (): Theme => {
-  return blackCyanTheme;
+  return fintechTheme;
 };

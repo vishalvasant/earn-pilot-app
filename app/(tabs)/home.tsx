@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { 
   SafeAreaView, 
   Text, 
@@ -18,21 +18,23 @@ import ColorMatchGame from '../../components/games/ColorMatchGame';
 import ImageSimilarityGame from '../../components/games/ImageSimilarityGame';
 import MathQuizGame from '../../components/games/MathQuizGame';
 import MemoryPatternGame from '../../components/games/MemoryPatternGame';
+import Icon from '../../components/Icon';
 
 const { width } = Dimensions.get('window');
 
-// Dummy data for charts and stats
-const mockData = {
-  totalEarnings: 15420,
-  todayEarnings: 340,
-  completedTasks: 145,
-  pendingTasks: 8,
-  weeklyData: [120, 180, 220, 340, 280, 310, 340],
-  recentActivities: [
-    { id: 1, type: 'task_completed', title: 'Daily Survey', points: 50, time: '2 hours ago' },
-    { id: 2, type: 'bonus', title: 'Weekly Bonus', points: 200, time: '1 day ago' },
-    { id: 3, type: 'referral', title: 'Friend Referral', points: 100, time: '2 days ago' },
-  ]
+import { getDashboardDetails } from '../../services/dashboard';
+
+// Get dynamic greeting based on time of day
+const getGreeting = () => {
+  const hour = new Date().getHours();
+  
+  if (hour >= 5 && hour < 12) {
+    return 'Good Morning! ☀️';
+  } else if (hour >= 12 && hour < 17) {
+    return 'Good Afternoon! 👋';
+  } else {
+    return 'Good Evening! 🌆';
+  }
 };
 
 export default function HomeScreen() {
@@ -43,21 +45,61 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [activeGame, setActiveGame] = useState<'color-match' | 'image-similarity' | 'math-quiz' | 'memory-pattern' | null>(null);
   const { stats, loadStats, canPlayGame, getGameCooldown, addPoints } = useGameStore();
+  const [dashboard, setDashboard] = useState<any>(null);
+  const [loadingDashboard, setLoadingDashboard] = useState(true);
+  const [greeting, setGreeting] = useState(getGreeting());
 
-  // Dynamic data including game points
-  const dynamicData = {
-    totalEarnings: mockData.totalEarnings + stats.totalPoints,
-    todayEarnings: mockData.todayEarnings + stats.dailyPoints,
-    completedTasks: mockData.completedTasks + stats.gamesPlayed,
-    pendingTasks: mockData.pendingTasks,
-    weeklyData: mockData.weeklyData,
-    recentActivities: stats.gamesPlayed > 0 
-      ? [
-          { id: 0, type: 'game', title: 'Mini Games', points: stats.totalPoints, time: 'Today' },
-          ...mockData.recentActivities
-        ].slice(0, 3)
-      : mockData.recentActivities
-  };
+  useEffect(() => {
+    const run = async () => {
+      try {
+        const data = await getDashboardDetails();
+        // Accept either { data: ... } or raw shape
+        setDashboard(data?.data ?? data ?? null);
+      } catch (e) {
+        console.warn('Failed to load dashboard', e);
+      } finally {
+        setLoadingDashboard(false);
+      }
+    };
+    run();
+    loadStats();
+    
+    // Update greeting every minute
+    const greetingInterval = setInterval(() => {
+      setGreeting(getGreeting());
+    }, 60000); // Update every minute
+    
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+    ]).start();
+    
+    return () => clearInterval(greetingInterval);
+  }, []);
+
+  // Dynamic data including game points (safe defaults)
+  const dynamicData = useMemo(() => {
+    if (!dashboard) return null;
+    return {
+      totalEarnings: Number(dashboard.total_earned ?? 0) + Number(stats.totalPoints ?? 0),
+      todayEarnings: Number(stats.dailyPoints ?? 0),
+      completedTasks: Number(stats.gamesPlayed ?? 0),
+      pendingTasks: Number(dashboard.pending_tasks ?? 0),
+      weeklyData: Array.isArray(dashboard.weekly_earnings) ? dashboard.weekly_earnings : [],
+      recentActivities:
+        (stats.gamesPlayed ?? 0) > 0
+          ? [{ id: 0, type: 'game', title: 'Mini Games', points: stats.totalPoints ?? 0, time: 'Today' }]
+          : [],
+    };
+  }, [dashboard, stats]);
 
   useEffect(() => {
     // Load game stats
@@ -112,12 +154,15 @@ export default function HomeScreen() {
   };
 
   const WeeklyChart = () => {
-    const maxValue = Math.max(...mockData.weeklyData);
+    const weekly = dynamicData?.weeklyData && dynamicData.weeklyData.length > 0
+      ? dynamicData.weeklyData
+      : [10, 20, 15, 30, 25, 40, 35];
+    const maxValue = Math.max(...weekly, 1);
     return (
       <View style={styles.chartContainer}>
         <Text style={[styles.chartTitle, { color: theme.text }]}>Weekly Earnings</Text>
         <View style={styles.chart}>
-          {mockData.weeklyData.map((value, index) => {
+          {weekly.map((value: number, index: number) => {
             const height = (value / maxValue) * 100;
             const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
             return (
@@ -189,12 +234,12 @@ export default function HomeScreen() {
             end={{ x: 1, y: 1 }}
           >
             <View style={styles.headerContent}>
-              <Text style={styles.welcomeText}>Good Morning! 👋</Text>
+              <Text style={styles.welcomeText}>{greeting}</Text>
               <Text style={styles.nameText}>Ready to earn today?</Text>
               
               <View style={styles.todayEarnings}>
                 <Text style={styles.earningsLabel}>Today's Earnings</Text>
-                <Text style={styles.earningsValue}>₹{dynamicData.todayEarnings}</Text>
+                <Text style={styles.earningsValue}>₹{dynamicData?.todayEarnings ?? 0}</Text>
               </View>
             </View>
           </LinearGradient>
@@ -211,9 +256,9 @@ export default function HomeScreen() {
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                 >
-                  <Text style={styles.statIconText}>₹</Text>
+                  <Icon name="money" size={24} color="#ffffff" />
                 </LinearGradient>
-                <Text style={[styles.statValue, { color: theme.text }]}>₹{dynamicData.totalEarnings}</Text>
+                <Text style={[styles.statValue, { color: theme.text }]}>₹{dynamicData?.totalEarnings ?? 0}</Text>
                 <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Total Earnings</Text>
               </View>
 
@@ -224,9 +269,9 @@ export default function HomeScreen() {
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                 >
-                  <Text style={styles.statIconText}>✓</Text>
+                  <Icon name="checkmark" size={24} color="#ffffff" />
                 </LinearGradient>
-                <Text style={[styles.statValue, { color: theme.text }]}>{dynamicData.completedTasks}</Text>
+                <Text style={[styles.statValue, { color: theme.text }]}>{dynamicData?.completedTasks ?? 0}</Text>
                 <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Completed</Text>
               </View>
             </View>
@@ -241,9 +286,9 @@ export default function HomeScreen() {
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                 >
-                  <Text style={styles.statIconText}>⏳</Text>
+                  <Icon name="pending" size={24} color="#ffffff" />
                 </LinearGradient>
-                <Text style={[styles.statValue, { color: theme.text }]}>{dynamicData.pendingTasks}</Text>
+                <Text style={[styles.statValue, { color: theme.text }]}>{dynamicData?.pendingTasks ?? 0}</Text>
                 <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Pending</Text>
               </View>
 
@@ -254,7 +299,7 @@ export default function HomeScreen() {
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                 >
-                  <Text style={styles.statIconText}>🎯</Text>
+                  <Icon name="target" size={24} color="#ffffff" />
                 </LinearGradient>
                 <Text style={[styles.statValue, { color: theme.text }]}>85%</Text>
                 <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Success Rate</Text>
@@ -274,22 +319,26 @@ export default function HomeScreen() {
         <AnimatedCard delay={800}>
           <View style={[styles.activitiesSection, { backgroundColor: theme.card, borderColor: theme.border }]}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Recent Activities</Text>
-            {dynamicData.recentActivities.map((activity, index) => (
-              <TouchableOpacity key={activity.id} style={styles.activityItem} activeOpacity={0.7}>
-                <View style={styles.activityIcon}>
-                  <Text style={styles.activityIconText}>
-                    {activity.type === 'task_completed' ? '✅' : 
-                     activity.type === 'bonus' ? '🎁' : 
-                     activity.type === 'game' ? '🎮' : '👥'}
-                  </Text>
-                </View>
-                <View style={styles.activityContent}>
-                  <Text style={[styles.activityTitle, { color: theme.text }]}>{activity.title}</Text>
-                  <Text style={[styles.activityTime, { color: theme.textSecondary }]}>{activity.time}</Text>
-                </View>
-                <Text style={[styles.activityPoints, { color: theme.primary }]}>+{activity.points}</Text>
-              </TouchableOpacity>
-            ))}
+            {dynamicData?.recentActivities?.length ? (
+              dynamicData.recentActivities.map((activity: any) => (
+                <TouchableOpacity key={activity.id} style={styles.activityItem} activeOpacity={0.7}>
+                  <View style={styles.activityIcon}>
+                    <Text style={styles.activityIconText}>
+                      {activity.type === 'task_completed' ? '✅' :
+                       activity.type === 'bonus' ? '🎁' :
+                       activity.type === 'game' ? '🎮' : '👥'}
+                    </Text>
+                  </View>
+                  <View style={styles.activityContent}>
+                    <Text style={[styles.activityTitle, { color: theme.text }]}>{activity.title}</Text>
+                    <Text style={[styles.activityTime, { color: theme.textSecondary }]}>{activity.time}</Text>
+                  </View>
+                  <Text style={[styles.activityPoints, { color: theme.primary }]}>+{activity.points}</Text>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <Text style={{ color: theme.textSecondary }}>No recent activities yet.</Text>
+            )}
           </View>
         </AnimatedCard>
 

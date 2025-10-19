@@ -15,31 +15,10 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { api } from '../../services/api';
+import { getProfile, updateProfile } from '../../services/api';
 import { useTheme } from '../../hooks/useTheme';
 import { useAuthStore } from '../../stores/authStore';
-
-// Mock user data for demonstration
-const mockUserData = {
-  name: 'John Doe',
-  email: 'john.doe@example.com',
-  phone: '+91 9876543210',
-  age: 28,
-  location: 'Mumbai, India',
-  joinDate: '2024-01-15',
-  totalEarnings: 15420,
-  tasksCompleted: 145,
-  successRate: 85,
-  level: 'Gold',
-  nextLevelProgress: 0.7,
-  achievements: [
-    { id: 1, title: 'First Task', description: 'Complete your first task', earned: true, date: '2024-01-15' },
-    { id: 2, title: 'Week Warrior', description: 'Complete 7 tasks in a week', earned: true, date: '2024-01-22' },
-    { id: 3, title: 'Hundred Club', description: 'Complete 100 tasks', earned: true, date: '2024-03-10' },
-    { id: 4, title: 'Top Earner', description: 'Earn ₹10,000', earned: true, date: '2024-03-15' },
-    { id: 5, title: 'Perfect Score', description: 'Maintain 90% success rate', earned: false, date: null },
-  ]
-};
+import Icon from '../../components/Icon';
 
 export default function ProfileScreen() {
   const theme = useTheme();
@@ -47,10 +26,10 @@ export default function ProfileScreen() {
   const router = useRouter();
   const logout = useAuthStore((s) => s.logout);
   
+  const [user, setUser] = useState<any | null>(null);
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
   const [location, setLocation] = useState('');
-  const [userData, setUserData] = useState(mockUserData);
   const [isEditing, setIsEditing] = useState(false);
   const [notifications, setNotifications] = useState(true);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -77,22 +56,25 @@ export default function ProfileScreen() {
 
   const loadProfile = async () => {
     try {
-      const res = await api.get('/api/profile');
-      const u = res.data || {};
-      setName(u.name || userData.name);
-      setAge(u.age ? String(u.age) : String(userData.age));
-      setLocation(u.location || userData.location);
+      const data = await getProfile();
+      // Accept flexible shapes: { user: {...} } | { data: { user } } | direct user
+      const u = (data && (data.user || data.data?.user || data)) || {};
+      setUser(u);
+      setName((u.name as string) || '');
+      setAge(u.age != null ? String(u.age) : '');
+      setLocation((u.location as string) || '');
     } catch {
-      // Use mock data
-      setName(userData.name);
-      setAge(String(userData.age));
-      setLocation(userData.location);
+      // Leave fields empty on failure (UI shows placeholders)
+      setUser(null);
+      setName('');
+      setAge('');
+      setLocation('');
     }
   };
 
   const onSave = async () => {
     try {
-      await api.put('/api/profile', { name, age: Number(age) || null, location });
+      await updateProfile({ name, age: Number(age) || undefined, location });
       Alert.alert('Success', 'Profile updated successfully!');
       setIsEditing(false);
     } catch (e: any) {
@@ -207,14 +189,13 @@ export default function ProfileScreen() {
                 </LinearGradient>
               </View>
               
-              <Text style={styles.userName}>{name}</Text>
-              <Text style={styles.userLevel}>{userData.level} Member</Text>
-              
+              <Text style={styles.userName}>{name || 'User'}</Text>
+              <Text style={styles.userLevel}>{user?.status ? String(user.status).toUpperCase() : 'MEMBER'}</Text>
+
               <View style={styles.levelProgress}>
-                <Text style={styles.levelProgressText}>Next Level Progress</Text>
-                <ProgressBar progress={userData.nextLevelProgress} color="#ffffff" />
+                <Text style={styles.levelProgressText}>Referral Code: {user?.referral_code || '-'}</Text>
                 <Text style={styles.levelProgressPercent}>
-                  {Math.round(userData.nextLevelProgress * 100)}%
+                  Member since {user?.created_at ? new Date(user.created_at).toLocaleDateString() : '-'}
                 </Text>
               </View>
             </View>
@@ -224,21 +205,21 @@ export default function ProfileScreen() {
         {/* Stats Cards */}
         <View style={styles.statsContainer}>
           <AnimatedCard delay={200}>
-              <View style={styles.statsGrid}>
+            <View style={styles.statsGrid}>
               <View style={[styles.statCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <LinearGradient colors={theme.gradient.primary as [string, string, ...string[]]} style={styles.statIcon}>
-                  <Text style={styles.statIconText}>₹</Text>
+                  <Icon name="money" size={24} color="#ffffff" />
                 </LinearGradient>
-                <Text style={[styles.statValue, { color: theme.text }]}>₹{userData.totalEarnings}</Text>
+                <Text style={[styles.statValue, { color: theme.text }]}>₹{user?.total_earned ?? 0}</Text>
                 <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Total Earned</Text>
               </View>
 
               <View style={[styles.statCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <LinearGradient colors={theme.gradient.secondary as [string, string, ...string[]]} style={styles.statIcon}>
-                  <Text style={styles.statIconText}>✓</Text>
+                  <Icon name="checkmark" size={24} color="#ffffff" />
                 </LinearGradient>
-                <Text style={[styles.statValue, { color: theme.text }]}>{userData.tasksCompleted}</Text>
-                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Tasks Done</Text>
+                <Text style={[styles.statValue, { color: theme.text }]}>{user?.points_balance ?? 0}</Text>
+                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Points Balance</Text>
               </View>
             </View>
           </AnimatedCard>
@@ -247,18 +228,18 @@ export default function ProfileScreen() {
             <View style={styles.statsGrid}>
               <View style={[styles.statCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <LinearGradient colors={theme.gradient.primary as [string, string, ...string[]]} style={styles.statIcon}>
-                  <Text style={styles.statIconText}>📊</Text>
+                  <Icon name="phone" size={24} color="#ffffff" />
                 </LinearGradient>
-                <Text style={[styles.statValue, { color: theme.text }]}>{userData.successRate}%</Text>
-                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Success Rate</Text>
+                <Text style={[styles.statValue, { color: theme.text }]}>{user?.phone || '-'}</Text>
+                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Phone</Text>
               </View>
 
               <View style={[styles.statCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <LinearGradient colors={theme.gradient.secondary as [string, string, ...string[]]} style={styles.statIcon}>
-                  <Text style={styles.statIconText}>🏆</Text>
+                  <Icon name="tag" size={24} color="#ffffff" />
                 </LinearGradient>
-                <Text style={[styles.statValue, { color: theme.text }]}>{userData.achievements.filter(a => a.earned).length}</Text>
-                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Achievements</Text>
+                <Text style={[styles.statValue, { color: theme.text }]}>{user?.referral_code || '-'}</Text>
+                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Referral Code</Text>
               </View>
             </View>
           </AnimatedCard>
@@ -273,8 +254,8 @@ export default function ProfileScreen() {
                 style={{ width: 28, height: 28, borderRadius: 8, marginRight: 12 }}
               />
               <View>
-                <Text style={{ color: theme.text, fontSize: 16, fontWeight: '600' }}>Black & Cyan</Text>
-                <Text style={{ color: theme.textSecondary, fontSize: 12 }}>Fixed theme applied across the app</Text>
+                <Text style={{ color: theme.text, fontSize: 16, fontWeight: '600' }}>Fintech Bold</Text>
+                <Text style={{ color: theme.textSecondary, fontSize: 12 }}>Professional navy & blue theme</Text>
               </View>
             </View>
           </View>
@@ -355,7 +336,7 @@ export default function ProfileScreen() {
             )}
           </View>
         </AnimatedCard>
-
+        
         {/* Settings */}
         <AnimatedCard delay={800}>
           <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.border }]}> 
@@ -363,7 +344,10 @@ export default function ProfileScreen() {
             
             <View style={styles.settingsItem}>
               <View style={styles.settingsLabelContainer}>
-                <Text style={[styles.settingsLabel, { color: theme.text }]}>🔔 Notifications</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Icon name="notifications" size={20} color={theme.text} />
+                  <Text style={[styles.settingsLabel, { color: theme.text }]}>Notifications</Text>
+                </View>
                 <Text style={[styles.settingsSubLabel, { color: theme.textSecondary }]}>
                   {notifications ? 'Enabled' : 'Disabled'}
                 </Text>
@@ -378,39 +362,32 @@ export default function ProfileScreen() {
           </View>
         </AnimatedCard>
 
-        {/* Achievements */}
+        {/* Account Info */}
         <AnimatedCard delay={1000}>
-          <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Achievements</Text>
-            
-            {userData.achievements.map((achievement, index) => (
-              <View key={achievement.id} style={[styles.achievementItem, { borderBottomColor: theme.borderLight }]}>
-                <View style={styles.achievementInfo}>
-                  <Text style={styles.achievementIcon}>
-                    {achievement.earned ? '🏆' : '🔒'}
+          <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.border }]}> 
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Account</Text>
+            <View style={[styles.achievementItem, { borderBottomColor: theme.borderLight }]}>
+              <View style={styles.achievementInfo}>
+                <Icon name="email" size={24} color={theme.primary} />
+                <View style={styles.achievementDetails}>
+                  <Text style={[styles.achievementTitle, { color: theme.text }]}>Email</Text>
+                  <Text style={[styles.achievementDescription, { color: theme.textSecondary }]}>
+                    {user?.email || 'Not set'}
                   </Text>
-                  <View style={styles.achievementDetails}>
-                    <Text style={[
-                      styles.achievementTitle, 
-                      { 
-                        color: achievement.earned ? theme.text : theme.textSecondary,
-                        opacity: achievement.earned ? 1 : 0.6 
-                      }
-                    ]}>
-                      {achievement.title}
-                    </Text>
-                    <Text style={[styles.achievementDescription, { color: theme.textSecondary }]}>
-                      {achievement.description}
-                    </Text>
-                  </View>
                 </View>
-                {achievement.earned && (
-                  <Text style={[styles.achievementDate, { color: theme.primary }]}>
-                    {achievement.date}
-                  </Text>
-                )}
               </View>
-            ))}
+            </View>
+            <View style={[styles.achievementItem, { borderBottomColor: theme.borderLight }]}> 
+              <View style={styles.achievementInfo}>
+                <Icon name="location" size={24} color={theme.primary} />
+                <View style={styles.achievementDetails}>
+                  <Text style={[styles.achievementTitle, { color: theme.text }]}>Location</Text>
+                  <Text style={[styles.achievementDescription, { color: theme.textSecondary }]}>
+                    {location || '-'}
+                  </Text>
+                </View>
+              </View>
+            </View>
           </View>
         </AnimatedCard>
 
@@ -421,7 +398,10 @@ export default function ProfileScreen() {
             onPress={() => setShowLogoutModal(true)}
             activeOpacity={0.8}
           >
-            <Text style={[styles.logoutButtonText, { color: theme.error }]}>🚪 Logout</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <Icon name="logout" size={20} color={theme.error} />
+              <Text style={[styles.logoutButtonText, { color: theme.error }]}>Logout</Text>
+            </View>
           </TouchableOpacity>
         </AnimatedCard>
       </ScrollView>
