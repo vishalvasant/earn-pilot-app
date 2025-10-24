@@ -10,30 +10,16 @@ import {
   Animated,
   Modal,
   TextInput,
-  Alert
+  Alert,
+  RefreshControl,
+  Dimensions
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../hooks/useTheme';
+import { api } from '../../services/api';
 
-// Dummy wallet data
-const mockWalletData = {
-  balance: 15420,
-  pendingAmount: 340,
-  totalWithdrawn: 45600,
-  recentTransactions: [
-    { id: 1, type: 'credit', amount: 340, description: 'Task Completion Bonus', date: '2024-01-15', status: 'completed' },
-    { id: 2, type: 'withdrawal', amount: -1500, description: 'Bank Transfer', date: '2024-01-14', status: 'processing' },
-    { id: 3, type: 'credit', amount: 200, description: 'Referral Bonus', date: '2024-01-13', status: 'completed' },
-    { id: 4, type: 'credit', amount: 150, description: 'Daily Streak Bonus', date: '2024-01-12', status: 'completed' },
-    { id: 5, type: 'withdrawal', amount: -2000, description: 'UPI Transfer', date: '2024-01-11', status: 'completed' },
-  ],
-  withdrawalMethods: [
-    { id: 1, name: 'Bank Transfer', icon: '🏦', minAmount: 100, fee: 0 },
-    { id: 2, name: 'UPI', icon: '📱', minAmount: 50, fee: 0 },
-    { id: 3, name: 'PayPal', icon: '💳', minAmount: 200, fee: 10 },
-    { id: 4, name: 'Paytm', icon: '💰', minAmount: 50, fee: 5 },
-  ]
-};
+const { height: screenHeight } = Dimensions.get('window');
+const HEADER_HEIGHT = screenHeight * 0.30; // 30% of screen height
 
 export default function WalletScreen() {
   const theme = useTheme();
@@ -41,11 +27,26 @@ export default function WalletScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const balanceAnim = useRef(new Animated.Value(0)).current;
+  
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [walletData, setWalletData] = useState({
+    balance: 0,
+    energy_points: 0,
+    pending_amount: 0,
+    total_withdrawn: 0,
+  });
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [withdrawalMethods, setWithdrawalMethods] = useState<any[]>([]);
+  
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [selectedMethod, setSelectedMethod] = useState<any>(null);
+  const [paymentDetails, setPaymentDetails] = useState('');
 
   useEffect(() => {
+    loadWalletData();
+    
     // Entrance animation
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -59,14 +60,42 @@ export default function WalletScreen() {
         useNativeDriver: true,
       }),
     ]).start();
+  }, []);
 
-    // Animate balance counter
+  // Animate balance when walletData changes
+  useEffect(() => {
     Animated.timing(balanceAnim, {
-      toValue: mockWalletData.balance,
+      toValue: walletData.balance,
       duration: 2000,
       useNativeDriver: false,
     }).start();
-  }, []);
+  }, [walletData.balance]);
+
+  const loadWalletData = async () => {
+    try {
+      setLoading(true);
+      const [balanceRes, activityRes, methodsRes] = await Promise.all([
+        api.get('/wallet/balance'),
+        api.get('/wallet/activity'),
+        api.get('/wallet/withdrawal-methods'),
+      ]);
+
+      setWalletData(balanceRes.data?.data || { balance: 0, energy_points: 0, pending_amount: 0, total_withdrawn: 0 });
+      setTransactions(activityRes.data?.data || []);
+      setWithdrawalMethods(methodsRes.data?.data || []);
+    } catch (error) {
+      console.error('Failed to load wallet data:', error);
+      Alert.alert('Error', 'Failed to load wallet data. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadWalletData();
+    setRefreshing(false);
+  };
 
   const AnimatedCard = ({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) => {
     const cardFade = useRef(new Animated.Value(0)).current;
@@ -101,7 +130,7 @@ export default function WalletScreen() {
     );
   };
 
-  const handleWithdraw = () => {
+  const handleWithdraw = async () => {
     if (!selectedMethod) {
       Alert.alert('Error', 'Please select a withdrawal method');
       return;
@@ -110,15 +139,36 @@ export default function WalletScreen() {
       Alert.alert('Error', 'Please enter a valid amount');
       return;
     }
-    if (parseFloat(withdrawAmount) > mockWalletData.balance) {
+    if (parseFloat(withdrawAmount) < selectedMethod.min_amount) {
+      Alert.alert('Error', `Minimum withdrawal amount for ${selectedMethod.name} is ₹${selectedMethod.min_amount}`);
+      return;
+    }
+    if (parseFloat(withdrawAmount) > walletData.balance) {
       Alert.alert('Error', 'Insufficient balance');
       return;
     }
+    if (!paymentDetails.trim()) {
+      Alert.alert('Error', 'Please enter payment details');
+      return;
+    }
 
-    Alert.alert('Success', `Withdrawal request of ₹${withdrawAmount} has been submitted successfully!`);
-    setShowWithdrawModal(false);
-    setWithdrawAmount('');
-    setSelectedMethod(null);
+    try {
+      const res = await api.post('/wallet/withdraw', {
+        amount: parseFloat(withdrawAmount),
+        method: selectedMethod.key,
+        payment_details: paymentDetails,
+      });
+
+      Alert.alert('Success! 🎉', res.data.message || 'Withdrawal request submitted successfully!');
+      setShowWithdrawModal(false);
+      setWithdrawAmount('');
+      setSelectedMethod(null);
+      setPaymentDetails('');
+      await loadWalletData(); // Reload wallet data
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || 'Failed to process withdrawal';
+      Alert.alert('Error', errorMsg);
+    }
   };
 
   return (
@@ -128,7 +178,13 @@ export default function WalletScreen() {
         backgroundColor={theme.background}
       />
       
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollView} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
+      >
         {/* Header */}
         <Animated.View 
           style={[
@@ -140,7 +196,7 @@ export default function WalletScreen() {
           ]}
         >
           <LinearGradient
-            colors={['#667eea', '#764ba2']}
+            colors={theme.gradient.primary as [string, string, ...string[]]}
             style={styles.headerGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
@@ -152,10 +208,10 @@ export default function WalletScreen() {
               <View style={styles.balanceCard}>
                 <Text style={styles.balanceLabel}>Available Balance</Text>
                 <Text style={styles.balanceValue}>
-                  ₹{mockWalletData.balance}
+                  ₹{walletData.balance.toFixed(2)}
                 </Text>
                 <View style={styles.pendingInfo}>
-                  <Text style={styles.pendingText}>₹{mockWalletData.pendingAmount} pending</Text>
+                  <Text style={styles.pendingText}>₹{walletData.pending_amount.toFixed(2)} pending • ⚡{walletData.energy_points} energy</Text>
                 </View>
               </View>
             </View>
@@ -172,7 +228,7 @@ export default function WalletScreen() {
               >
                 <Text style={styles.statIconText}>📊</Text>
               </LinearGradient>
-              <Text style={[styles.statValue, { color: theme.text }]}>₹{mockWalletData.totalWithdrawn}</Text>
+              <Text style={[styles.statValue, { color: theme.text }]}>₹{walletData.total_withdrawn.toFixed(2)}</Text>
               <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Total Withdrawn</Text>
             </View>
 
@@ -183,7 +239,7 @@ export default function WalletScreen() {
               >
                 <Text style={styles.statIconText}>⚡</Text>
               </LinearGradient>
-              <Text style={[styles.statValue, { color: theme.text }]}>₹{mockWalletData.pendingAmount}</Text>
+              <Text style={[styles.statValue, { color: theme.text }]}>₹{walletData.pending_amount.toFixed(2)}</Text>
               <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Pending Amount</Text>
             </View>
           </View>
@@ -213,18 +269,18 @@ export default function WalletScreen() {
         <AnimatedCard delay={600}>
           <View style={[styles.methodsSection, { backgroundColor: theme.card, borderColor: theme.border }]}>
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Withdrawal Methods</Text>
-            {mockWalletData.withdrawalMethods.map((method, index) => (
+            {withdrawalMethods.map((method: any, index: number) => (
               <TouchableOpacity 
-                key={method.id} 
+                key={index} 
                 style={[styles.methodItem, { borderBottomColor: theme.borderLight }]}
                 activeOpacity={0.7}
               >
                 <View style={styles.methodInfo}>
-                  <Text style={styles.methodIcon}>{method.icon}</Text>
+                  <Text style={styles.methodIcon}>{method.icon || '💰'}</Text>
                   <View style={styles.methodDetails}>
                     <Text style={[styles.methodName, { color: theme.text }]}>{method.name}</Text>
                     <Text style={[styles.methodMeta, { color: theme.textSecondary }]}>
-                      Min: ₹{method.minAmount} • Fee: ₹{method.fee}
+                      Min: ₹{method.min_amount} • {method.processing_time}
                     </Text>
                   </View>
                 </View>
@@ -237,46 +293,50 @@ export default function WalletScreen() {
         {/* Recent Transactions */}
         <AnimatedCard delay={800}>
           <View style={[styles.transactionsSection, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Recent Transactions</Text>
-            {mockWalletData.recentTransactions.map((transaction, index) => (
-              <View key={transaction.id} style={[styles.transactionItem, { borderBottomColor: theme.borderLight }]}>
-                <View style={styles.transactionInfo}>
-                  <View style={[
-                    styles.transactionIcon,
-                    { backgroundColor: transaction.type === 'credit' ? '#e8f5e8' : '#fff0f0' }
-                  ]}>
-                    <Text style={styles.transactionIconText}>
-                      {transaction.type === 'credit' ? '↗️' : '↙️'}
-                    </Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Recent Activity</Text>
+            {transactions.length === 0 ? (
+              <Text style={[{ padding: 20, textAlign: 'center', color: theme.textSecondary }]}>No transactions yet</Text>
+            ) : (
+              transactions.map((transaction: any, index: number) => (
+                <View key={index} style={[styles.transactionItem, { borderBottomColor: theme.borderLight }]}>
+                  <View style={styles.transactionInfo}>
+                    <View style={[
+                      styles.transactionIcon,
+                      { backgroundColor: transaction.type === 'earning' ? '#e8f5e8' : '#fff0f0' }
+                    ]}>
+                      <Text style={styles.transactionIconText}>
+                        {transaction.type === 'earning' ? '↗️' : '↙️'}
+                      </Text>
+                    </View>
+                    <View style={styles.transactionDetails}>
+                      <Text style={[styles.transactionTitle, { color: theme.text }]}>
+                        {transaction.description}
+                      </Text>
+                      <Text style={[styles.transactionDate, { color: theme.textSecondary }]}>
+                        {new Date(transaction.created_at).toLocaleDateString()}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={styles.transactionDetails}>
-                    <Text style={[styles.transactionTitle, { color: theme.text }]}>
-                      {transaction.description}
+                  <View style={styles.transactionAmount}>
+                    <Text style={[
+                      styles.amountText,
+                      { color: transaction.type === 'earning' ? theme.success : theme.error }
+                    ]}>
+                      {transaction.type === 'earning' ? '+' : '-'}₹{Math.abs(transaction.amount).toFixed(2)}
                     </Text>
-                    <Text style={[styles.transactionDate, { color: theme.textSecondary }]}>
-                      {transaction.date}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.transactionAmount}>
-                  <Text style={[
-                    styles.amountText,
-                    { color: transaction.type === 'credit' ? theme.success : theme.error }
-                  ]}>
-                    {transaction.type === 'credit' ? '+' : ''}₹{Math.abs(transaction.amount)}
-                  </Text>
-                  <Text style={[
-                    styles.statusText,
+                    <Text style={[
+                      styles.statusText,
                     { 
                       color: transaction.status === 'completed' ? theme.success : 
-                             transaction.status === 'processing' ? theme.warning : theme.error
+                             transaction.status === 'pending' ? theme.warning : theme.error
                     }
                   ]}>
-                    {transaction.status}
+                    {transaction.status || 'completed'}
                   </Text>
                 </View>
               </View>
-            ))}
+              ))
+            )}
           </View>
         </AnimatedCard>
       </ScrollView>
@@ -306,22 +366,42 @@ export default function WalletScreen() {
 
             <View style={styles.modalSection}>
               <Text style={[styles.modalLabel, { color: theme.text }]}>Withdrawal Method</Text>
-              {mockWalletData.withdrawalMethods.map((method) => (
+              {withdrawalMethods.map((method: any, index: number) => (
                 <TouchableOpacity
-                  key={method.id}
+                  key={index}
                   style={[
                     styles.modalMethodItem,
                     { 
-                      borderColor: selectedMethod?.id === method.id ? theme.primary : theme.border,
-                      backgroundColor: selectedMethod?.id === method.id ? theme.primary + '10' : theme.background
+                      borderColor: selectedMethod?.key === method.key ? theme.primary : theme.border,
+                      backgroundColor: selectedMethod?.key === method.key ? theme.primary + '10' : theme.background
                     }
                   ]}
                   onPress={() => setSelectedMethod(method)}
                 >
-                  <Text style={styles.modalMethodIcon}>{method.icon}</Text>
-                  <Text style={[styles.modalMethodName, { color: theme.text }]}>{method.name}</Text>
+                  <Text style={styles.modalMethodIcon}>{method.icon || '💰'}</Text>
+                  <View>
+                    <Text style={[styles.modalMethodName, { color: theme.text }]}>{method.name}</Text>
+                    <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
+                      Min ₹{method.min_amount}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               ))}
+            </View>
+
+            <View style={styles.modalSection}>
+              <Text style={[styles.modalLabel, { color: theme.text }]}>
+                {selectedMethod?.key === 'upi' ? 'UPI ID' : 
+                 selectedMethod?.key === 'bank_transfer' ? 'Bank Details (Acc No/IFSC)' : 
+                 'Voucher Details'}
+              </Text>
+              <TextInput
+                style={[styles.modalInput, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
+                placeholder={selectedMethod?.key === 'upi' ? 'example@upi' : 'Enter details'}
+                placeholderTextColor={theme.placeholder}
+                value={paymentDetails}
+                onChangeText={setPaymentDetails}
+              />
             </View>
 
             <View style={styles.modalButtons}>
@@ -363,38 +443,41 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   headerGradient: {
     paddingHorizontal: 20,
-    paddingVertical: 30,
-    paddingTop: 60,
+    paddingVertical: 16,
+    paddingTop: 50,
+    height: HEADER_HEIGHT,
   },
   headerContent: {
+    flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#ffffff',
     marginBottom: 4,
   },
   headerSubtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: 'rgba(255, 255, 255, 0.9)',
-    marginBottom: 24,
+    marginBottom: 16,
   },
   balanceCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 16,
     alignItems: 'center',
-    minWidth: 250,
+    width: '100%',
   },
   balanceLabel: {
-    fontSize: 14,
+    fontSize: 12,
     color: 'rgba(255, 255, 255, 0.8)',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   balanceValue: {
-    fontSize: 36,
+    fontSize: 32,
     fontWeight: 'bold',
     color: '#ffffff',
     marginBottom: 8,
@@ -402,11 +485,11 @@ const createStyles = (theme: any) => StyleSheet.create({
   pendingInfo: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+    paddingVertical: 4,
+    borderRadius: 10,
   },
   pendingText: {
-    fontSize: 12,
+    fontSize: 11,
     color: 'rgba(255, 255, 255, 0.9)',
   },
   statsContainer: {
@@ -434,7 +517,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 20,
   },
   statValue: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 4,
   },
@@ -451,12 +534,12 @@ const createStyles = (theme: any) => StyleSheet.create({
     overflow: 'hidden',
   },
   withdrawGradient: {
-    paddingVertical: 18,
+    paddingVertical: 16,
     alignItems: 'center',
   },
   withdrawText: {
     color: '#ffffff',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
   },
   methodsSection: {

@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "Earn Pilot",
+    "slug": "earn-pilot-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/NewPilot.png",
+    "userInterfaceStyle": "automatic",
+    "scheme": "earnpilot",
+    "splash": {
+      "image": "./assets/images/NewPilot.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A1F44"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.networks11.earnpilot"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/NewPilot.png",
+        "backgroundColor": "#0A1F44"
+      },
+      "package": "com.networks11.earnpilot",
+      "versionCode": 1,
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/NewPilot.png"
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "your-project-id"
+      },
+      "API_BASE_URL": "https://networks11.com"
+    }
+  }
+}

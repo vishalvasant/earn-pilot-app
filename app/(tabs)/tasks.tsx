@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { 
-  ActivityIndicator, 
+  ActivityIndicator,
+  Alert,
   FlatList, 
   SafeAreaView, 
   Text, 
@@ -17,7 +18,8 @@ import { api } from '../../services/api';
 import { useTheme } from '../../hooks/useTheme';
 import Icon from '../../components/Icon';
 
-const { width } = Dimensions.get('window');
+const { width, height: screenHeight } = Dimensions.get('window');
+const HEADER_HEIGHT = screenHeight * 0.30; // 30% of screen height
 
 // Create styles function (defined here for use in TaskCard)
 const createStyles = (theme: any) => StyleSheet.create({
@@ -34,42 +36,47 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 16,
   },
   header: {
+    marginBottom: 20,
+  },
+  headerGradient: {
     paddingHorizontal: 20,
-    paddingVertical: 30,
-    paddingTop: 60,
+    paddingVertical: 16,
+    paddingTop: 50,
+    height: HEADER_HEIGHT,
   },
   headerContent: {
-    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#ffffff',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   headerSubtitle: {
     fontSize: 16,
     color: 'rgba(255, 255, 255, 0.9)',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   statsRow: {
     flexDirection: 'row',
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 12,
+    padding: 12,
   },
   statItem: {
     flex: 1,
     alignItems: 'center',
   },
   statNumber: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#ffffff',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: 'rgba(255, 255, 255, 0.8)',
   },
   filtersContainer: {
@@ -206,7 +213,7 @@ const createStyles = (theme: any) => StyleSheet.create({
 });
 
 // Enhanced TaskCard component with animations
-const TaskCard = ({ task, index, theme }: { task: any; index: number; theme: any }) => {
+const TaskCard = ({ task, index, theme, onComplete }: { task: any; index: number; theme: any; onComplete: (task: any) => void }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
@@ -368,26 +375,28 @@ const TaskCard = ({ task, index, theme }: { task: any; index: number; theme: any
                   Est. {task.estimated_time || '5 min'}
                 </Text>
               </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Icon name="difficulty" size={14} color={theme.textSecondary} />
-                <Text style={[styles.metaText, { color: theme.textSecondary }]}>
-                  Difficulty: {task.difficulty || 'Easy'}
-                </Text>
-              </View>
+              {task.energy_cost > 0 && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Text style={[styles.metaText, { color: theme.warning }]}>
+                    ⚡ {task.energy_cost} energy
+                  </Text>
+                </View>
+              )}
             </View>
             
             <TouchableOpacity
               style={[
                 styles.actionButton,
                 { 
-                  backgroundColor: task.is_completed ? theme.success : theme.primary,
-                  opacity: task.is_completed ? 0.7 : 1
+                  backgroundColor: task.is_completed ? theme.success : (task.disabled ? theme.textSecondary : theme.primary),
+                  opacity: (task.is_completed || task.disabled) ? 0.7 : 1
                 }
               ]}
-              disabled={task.is_completed}
+              disabled={task.is_completed || task.disabled}
+              onPress={() => onComplete(task)}
             >
               <Text style={styles.actionButtonText}>
-                {task.is_completed ? 'Completed' : 'Start Task'}
+                {task.is_completed ? '✓ Completed' : 'Complete Task'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -404,64 +413,12 @@ export default function TasksScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [tasks, setTasks] = useState<any[]>([]);
   const [filter, setFilter] = useState('all');
+  const [userEnergy, setUserEnergy] = useState(0);
   const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  // Mock data for demonstration
-  const mockTasks = [
-    {
-      id: 1,
-      title: 'Complete Daily Survey',
-      description: 'Answer a quick 5-minute survey about your shopping preferences',
-      points: 50,
-      is_completed: false,
-      estimated_time: '5 min',
-      difficulty: 'Easy',
-      subtasks: [
-        { id: 1, title: 'Answer personal info questions', is_completed: true },
-        { id: 2, title: 'Rate product preferences', is_completed: false },
-      ]
-    },
-    {
-      id: 2,
-      title: 'Watch Advertisement Video',
-      description: 'Watch a 30-second promotional video and rate it',
-      points: 25,
-      is_completed: true,
-      estimated_time: '1 min',
-      difficulty: 'Easy',
-      subtasks: []
-    },
-    {
-      id: 3,
-      title: 'Social Media Engagement',
-      description: 'Follow our social media accounts and share a post',
-      points: 100,
-      is_completed: false,
-      estimated_time: '10 min',
-      difficulty: 'Medium',
-      subtasks: [
-        { id: 1, title: 'Follow Instagram account', is_completed: false },
-        { id: 2, title: 'Like recent posts', is_completed: false },
-        { id: 3, title: 'Share story', is_completed: false },
-      ]
-    },
-    {
-      id: 4,
-      title: 'Product Review',
-      description: 'Write a detailed review for a product you recently purchased',
-      points: 200,
-      is_completed: false,
-      estimated_time: '15 min',
-      difficulty: 'Hard',
-      subtasks: [
-        { id: 1, title: 'Upload product photos', is_completed: false },
-        { id: 2, title: 'Write detailed review', is_completed: false },
-      ]
-    },
-  ];
 
   useEffect(() => {
     loadTasks();
+    loadUserEnergy();
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 800,
@@ -472,24 +429,82 @@ export default function TasksScreen() {
   const loadTasks = async () => {
     try {
       setLoading(true);
-      // Try to load from API, fallback to mock data
-      try {
-        const res = await api.get('/api/tasks');
-        setTasks(res.data?.data || mockTasks);
-      } catch {
-        setTasks(mockTasks);
-      }
-    } catch (e) {
-      setTasks(mockTasks);
+      const res = await api.get('/tasks');
+      const tasksData = res.data?.data || [];
+      
+      // Transform API data to match UI expectations
+      const formattedTasks = tasksData.map((task: any) => ({
+        id: task.id,
+        title: task.title,
+        description: task.description,
+        points: task.reward_points,
+        energy_cost: task.energy_cost || 0,
+        is_completed: task.status === 'completed',
+        disabled: task.disabled || false,
+        estimated_time: '5 min', // Default, can be added to backend
+        difficulty: 'Medium', // Default, can be added to backend
+        subtasks: task.subtasks || [],
+      }));
+      
+      setTasks(formattedTasks);
+    } catch (error) {
+      console.error('Failed to load tasks:', error);
+      Alert.alert('Error', 'Failed to load tasks. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
+  const loadUserEnergy = async () => {
+    try {
+      const res = await api.get('/wallet/balance');
+      setUserEnergy(res.data?.data?.energy_points || 0);
+    } catch (error) {
+      console.error('Failed to load energy:', error);
+    }
+  };
+
   const handleRefresh = async () => {
     setRefreshing(true);
-    await loadTasks();
+    await Promise.all([loadTasks(), loadUserEnergy()]);
     setRefreshing(false);
+  };
+
+  const handleCompleteTask = async (task: any) => {
+    if (task.is_completed || task.disabled) {
+      return;
+    }
+
+    // Check energy requirement
+    if (task.energy_cost > 0 && userEnergy < task.energy_cost) {
+      Alert.alert(
+        'Insufficient Energy',
+        `This task requires ${task.energy_cost} energy points. You have ${userEnergy}. Play mini-games to earn more energy!`,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Complete Task',
+      `Complete "${task.title}" for ${task.points} points?${task.energy_cost > 0 ? `\n\n⚡ Will use ${task.energy_cost} energy` : ''}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Complete',
+          onPress: async () => {
+            try {
+              const res = await api.post(`/tasks/${task.id}/complete`);
+              Alert.alert('Success! 🎉', res.data.message || 'Task completed successfully!');
+              await handleRefresh(); // Reload tasks and energy
+            } catch (error: any) {
+              const errorMsg = error.response?.data?.message || 'Failed to complete task';
+              Alert.alert('Error', errorMsg);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const filteredTasks = tasks.filter(task => {
@@ -543,15 +558,25 @@ export default function TasksScreen() {
       
       <Animated.View style={{ opacity: fadeAnim, flex: 1 }}>
         {/* Header */}
-        <LinearGradient
-          colors={theme.gradient.secondary as [string, string, ...string[]]}
-          style={styles.header}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
+        <View style={styles.header}>
+          <LinearGradient
+            colors={theme.gradient.primary as [string, string, ...string[]]}
+            style={styles.headerGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
           <View style={styles.headerContent}>
-            <Text style={styles.headerTitle}>Explore Opportunities 🧭</Text>
-            <Text style={styles.headerSubtitle}>Discover tasks and earn rewards</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.headerTitle}>Explore Opportunities 🧭</Text>
+                <Text style={styles.headerSubtitle}>Discover tasks and earn rewards</Text>
+              </View>
+              <View style={{ backgroundColor: 'rgba(255, 255, 255, 0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, marginLeft: 12 }}>
+                <Text style={{ color: '#ffffff', fontSize: 14, fontWeight: '600' }}>
+                  ⚡ {userEnergy}
+                </Text>
+              </View>
+            </View>
             
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
@@ -569,6 +594,7 @@ export default function TasksScreen() {
             </View>
           </View>
         </LinearGradient>
+        </View>
 
         {/* Filters */}
         <View style={styles.filtersContainer}>
@@ -584,7 +610,7 @@ export default function TasksScreen() {
           data={filteredTasks}
           keyExtractor={(item) => String(item.id)}
           renderItem={({ item, index }) => (
-            <TaskCard task={item} index={index} theme={theme} />
+            <TaskCard task={item} index={index} theme={theme} onComplete={handleCompleteTask} />
           )}
           refreshControl={
             <RefreshControl

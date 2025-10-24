@@ -9,6 +9,7 @@ interface UserProfile {
   location?: string;
   referral_code?: string;
   points_balance?: string;
+  energy_points?: string;
   total_earned?: string;
   status?: string;
 }

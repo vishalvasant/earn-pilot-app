@@ -12,6 +12,7 @@ import {
   Animated,
   Modal,
   Switch,
+  Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -19,6 +20,9 @@ import { getProfile, updateProfile } from '../../services/api';
 import { useTheme } from '../../hooks/useTheme';
 import { useAuthStore } from '../../stores/authStore';
 import Icon from '../../components/Icon';
+
+const { height: screenHeight } = Dimensions.get('window');
+const HEADER_HEIGHT = screenHeight * 0.30;
 
 export default function ProfileScreen() {
   const theme = useTheme();
@@ -194,9 +198,6 @@ export default function ProfileScreen() {
 
               <View style={styles.levelProgress}>
                 <Text style={styles.levelProgressText}>Referral Code: {user?.referral_code || '-'}</Text>
-                <Text style={styles.levelProgressPercent}>
-                  Member since {user?.created_at ? new Date(user.created_at).toLocaleDateString() : '-'}
-                </Text>
               </View>
             </View>
           </LinearGradient>
@@ -459,24 +460,27 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   headerGradient: {
     paddingHorizontal: 20,
-    paddingVertical: 30,
-    paddingTop: 60,
+    paddingVertical: 16,
+    paddingTop: 50,
+    height: HEADER_HEIGHT,
   },
   headerContent: {
+    flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   avatarContainer: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   avatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     alignItems: 'center',
     justifyContent: 'center',
   },
   avatarText: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#ffffff',
   },
@@ -487,18 +491,18 @@ const createStyles = (theme: any) => StyleSheet.create({
     marginBottom: 4,
   },
   userLevel: {
-    fontSize: 16,
+    fontSize: 14,
     color: 'rgba(255, 255, 255, 0.9)',
-    marginBottom: 20,
+    marginBottom: 12,
   },
   levelProgress: {
     alignItems: 'center',
     width: '100%',
   },
   levelProgressText: {
-    fontSize: 14,
+    fontSize: 13,
     color: 'rgba(255, 255, 255, 0.8)',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   progressContainer: {
     width: '80%',
@@ -512,7 +516,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     borderRadius: 3,
   },
   levelProgressPercent: {
-    fontSize: 12,
+    fontSize: 11,
     color: 'rgba(255, 255, 255, 0.9)',
     fontWeight: '600',
   },
@@ -546,7 +550,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontWeight: 'bold',
   },
   statValue: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 4,
   },

@@ -20,7 +20,8 @@ import MathQuizGame from '../../components/games/MathQuizGame';
 import MemoryPatternGame from '../../components/games/MemoryPatternGame';
 import Icon from '../../components/Icon';
 
-const { width } = Dimensions.get('window');
+const { height: screenHeight } = Dimensions.get('window');
+const HEADER_HEIGHT = screenHeight * 0.30;
 
 import { getDashboardDetails } from '../../services/dashboard';
 
@@ -604,11 +605,14 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   headerGradient: {
     paddingHorizontal: 20,
-    paddingVertical: 30,
+    paddingVertical: 16,
     paddingTop: 50,
+    height: HEADER_HEIGHT,
   },
   headerContent: {
+    flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   welcomeText: {
     fontSize: 24,
@@ -619,22 +623,22 @@ const createStyles = (theme: any) => StyleSheet.create({
   nameText: {
     fontSize: 16,
     color: 'rgba(255, 255, 255, 0.9)',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   todayEarnings: {
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 20,
+    paddingVertical: 10,
+    borderRadius: 16,
   },
   earningsLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: 'rgba(255, 255, 255, 0.8)',
     marginBottom: 4,
   },
   earningsValue: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 'bold',
     color: '#ffffff',
   },
