@@ -494,6 +494,10 @@ export default function TasksScreen() {
           text: 'Complete',
           onPress: async () => {
             try {
+              // Step 1: Start the task (deducts energy if needed). Idempotent.
+              await api.post(`/tasks/${task.id}/start`);
+
+              // Step 2: Complete the task
               const res = await api.post(`/tasks/${task.id}/complete`);
               Alert.alert('Success! 🎉', res.data.message || 'Task completed successfully!');
               await handleRefresh(); // Reload tasks and energy

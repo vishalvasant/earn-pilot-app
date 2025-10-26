@@ -28,7 +28,11 @@
       "versionCode": 1,
       "permissions": [
         "INTERNET",
-        "ACCESS_NETWORK_STATE"
+        "ACCESS_NETWORK_STATE",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "WAKE_LOCK",
+        "POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -37,7 +41,14 @@
       "favicon": "./assets/images/NewPilot.png"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/NewPilot.png",
+          "color": "#3B82F6"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
@@ -47,9 +58,9 @@
         "origin": false
       },
       "eas": {
-        "projectId": "your-project-id"
+        "projectId": "156da554-3870-41b3-9a68-2191a71f936d"
       },
-      "API_BASE_URL": "https://networks11.com"
+      "API_BASE_URL": "http://127.0.0.1:8000"
     }
   }
 }

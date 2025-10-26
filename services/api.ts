@@ -1,12 +1,23 @@
 import axios from 'axios';
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import { useAuthStore } from '../stores/authStore';
+// Resolve base URL from config with sensible local defaults
+const rawBaseURL = (Constants.expoConfig?.extra as any)?.API_BASE_URL || 'http://127.0.0.1:8000';
+let resolvedBaseURL = rawBaseURL;
 
-const baseURL = (Constants.expoConfig?.extra as any)?.API_BASE_URL || 'http://127.0.0.1:8000';
+// On Android emulator, localhost of the host machine is 10.0.2.2
+if (Platform.OS === 'android') {
+  if (rawBaseURL.includes('127.0.0.1')) {
+    resolvedBaseURL = rawBaseURL.replace('127.0.0.1', '10.0.2.2');
+  } else if (rawBaseURL.includes('localhost')) {
+    resolvedBaseURL = rawBaseURL.replace('localhost', '10.0.2.2');
+  }
+}
 
-console.log('🔗 API Base URL:', baseURL);
+console.log('🔗 API Base URL:', resolvedBaseURL);
 
-export const api = axios.create({ baseURL: `${baseURL}/api` });
+export const api = axios.create({ baseURL: `${resolvedBaseURL}/api` });
 
 api.interceptors.request.use((config) => {
   const token = useAuthStore.getState().token;
