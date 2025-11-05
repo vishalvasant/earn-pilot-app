@@ -33,12 +33,12 @@ export default {
   ],
   extra: {
     // Production API (Active)
-    API_BASE_URL: "https://networks11.com",
-    eas: {
-      projectId: "156da554-3870-41b3-9a68-2191a71f936d"
-    }
+    // API_BASE_URL: "https://networks11.com",
+    // eas: {
+    //   projectId: "156da554-3870-41b3-9a68-2191a71f936d"
+    // }
     // For local development (Commented):
-    // API_BASE_URL: "http://192.168.31.242:8000", // Real device
+    API_BASE_URL: "http://192.168.31.242:8000", // Real device
     // API_BASE_URL: "http://127.0.0.1:8000", // Emulator
   },
 };
