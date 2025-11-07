@@ -13,12 +13,15 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../hooks/useTheme';
+import { api } from '../../services/api';
+import { useUserStore } from '../../stores/userStore';
 import { useGameStore } from '../../hooks/useGameStore';
 import ColorMatchGame from '../../components/games/ColorMatchGame';
 import ImageSimilarityGame from '../../components/games/ImageSimilarityGame';
 import MathQuizGame from '../../components/games/MathQuizGame';
 import MemoryPatternGame from '../../components/games/MemoryPatternGame';
 import Icon from '../../components/Icon';
+import ThemedPopup from '../../components/ThemedPopup';
 
 const { height: screenHeight } = Dimensions.get('window');
 const HEADER_HEIGHT = screenHeight * 0.30;
@@ -45,10 +48,15 @@ export default function HomeScreen() {
   const slideAnim = useRef(new Animated.Value(50)).current;
   const [refreshing, setRefreshing] = useState(false);
   const [activeGame, setActiveGame] = useState<'color-match' | 'image-similarity' | 'math-quiz' | 'memory-pattern' | null>(null);
-  const { stats, loadStats, canPlayGame, getGameCooldown, addPoints } = useGameStore();
+  const { stats, gameConfigs, loadStats, loadGameConfigs, canPlayGame, getGameCooldown, getGameConfig, addPoints } = useGameStore();
+  const { setProfile } = useUserStore();
   const [dashboard, setDashboard] = useState<any>(null);
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [greeting, setGreeting] = useState(getGreeting());
+  const [showCooldownPopup, setShowCooldownPopup] = useState(false);
+  const [cooldownMessage, setCooldownMessage] = useState('');
+  const [popupTitle, setPopupTitle] = useState('Game Complete');
+  const [gameCooldowns, setGameCooldowns] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const run = async () => {
@@ -64,6 +72,7 @@ export default function HomeScreen() {
     };
     run();
     loadStats();
+    loadGameConfigs();
     
     // Update greeting every minute
     const greetingInterval = setInterval(() => {
@@ -86,18 +95,41 @@ export default function HomeScreen() {
     return () => clearInterval(greetingInterval);
   }, []);
 
+  // Update cooldowns every 30 seconds and when game configs change
+  useEffect(() => {
+    if (gameConfigs.length > 0) {
+      updateAllGameCooldowns();
+      
+      const cooldownInterval = setInterval(() => {
+        // Decrease cooldowns by 30 seconds
+        setGameCooldowns(prev => {
+          const updated = { ...prev };
+          Object.keys(updated).forEach(gameSlug => {
+            updated[gameSlug] = Math.max(0, updated[gameSlug] - 30);
+            if (updated[gameSlug] <= 0) {
+              delete updated[gameSlug];
+            }
+          });
+          return updated;
+        });
+      }, 30000); // Update every 30 seconds
+
+      return () => clearInterval(cooldownInterval);
+    }
+  }, [gameConfigs]);
+
   // Dynamic data including game points (safe defaults)
   const dynamicData = useMemo(() => {
     if (!dashboard) return null;
     return {
-      totalEarnings: Number(dashboard.total_earned ?? 0) + Number(stats.totalPoints ?? 0),
-      todayEarnings: Number(stats.dailyPoints ?? 0),
+      totalEarnings: Number(dashboard.total_earned ?? 0),
+      todayEarnings: 0, // We'll get this from energy points activity if needed
       completedTasks: Number(stats.gamesPlayed ?? 0),
       pendingTasks: Number(dashboard.pending_tasks ?? 0),
       weeklyData: Array.isArray(dashboard.weekly_earnings) ? dashboard.weekly_earnings : [],
       recentActivities:
         (stats.gamesPlayed ?? 0) > 0
-          ? [{ id: 0, type: 'game', title: 'Mini Games', points: stats.totalPoints ?? 0, time: 'Today' }]
+          ? [{ id: 0, type: 'game', title: 'Mini Games', points: dashboard.energy_points ?? 0, time: 'Today' }]
           : [],
     };
   }, [dashboard, stats]);
@@ -194,17 +226,197 @@ export default function HomeScreen() {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  const handleGameStart = (gameType: 'color-match' | 'image-similarity' | 'math-quiz' | 'memory-pattern') => {
-    if (canPlayGame(gameType)) {
-      setActiveGame(gameType);
+  const handleGameStart = async (gameType: 'color-match' | 'image-similarity' | 'math-quiz' | 'memory-pattern') => {
+    // Check if game is in cooldown
+    const remainingSeconds = gameCooldowns[gameType] || 0;
+    
+    if (remainingSeconds > 0) {
+      const remainingMinutes = Math.ceil(remainingSeconds / 60);
+      setPopupTitle('⏰ Game in Cooldown');
+      setCooldownMessage(`Please wait ${remainingMinutes} more minute${remainingMinutes !== 1 ? 's' : ''} before playing this game again for energy points.`);
+      setShowCooldownPopup(true);
+      return;
+    }
+
+    // Game can be played
+    setActiveGame(gameType);
+  };
+
+  const refreshUserProfile = async () => {
+    try {
+      const response = await api.get('/profile');
+      setProfile(response.data.user);
+    } catch (error) {
+      console.error('Failed to refresh user profile:', error);
+    }
+  };
+
+  const refreshDashboard = async () => {
+    try {
+      const data = await getDashboardDetails();
+      setDashboard(data?.data ?? data ?? null);
+    } catch (error) {
+      console.error('Failed to refresh dashboard:', error);
+    }
+  };
+
+  const checkGameCooldown = async (gameSlug: string): Promise<{ canPlay: boolean; remainingSeconds: number }> => {
+    try {
+      const gameId = await getGameIdBySlug(gameSlug);
+      if (!gameId) return { canPlay: true, remainingSeconds: 0 };
+
+      const userResponse = await api.get('/profile');
+      const userId = userResponse.data.user.id;
+
+      // Check if game can be played without creating a session
+      const response = await api.post(`/games/${gameId}/can-play`, { user_id: userId });
+      
+      if (response.data.success && response.data.can_play) {
+        return { canPlay: true, remainingSeconds: 0 };
+      } else {
+        const remainingSeconds = response.data.cooldown_seconds_remaining || 0;
+        return { canPlay: false, remainingSeconds };
+      }
+    } catch (error: any) {
+      console.warn('Error checking game cooldown:', error);
+      return { canPlay: true, remainingSeconds: 0 }; // Default to allowing play if check fails
+    }
+  };
+
+  const updateAllGameCooldowns = async () => {
+    const cooldowns: Record<string, number> = {};
+    for (const game of gameConfigs) {
+      const status = await checkGameCooldown(game.slug);
+      if (!status.canPlay) {
+        cooldowns[game.slug] = status.remainingSeconds;
+      }
+    }
+    setGameCooldowns(cooldowns);
+  };
+
+  // Map game types to backend slugs and find game ID dynamically
+  const getGameIdBySlug = async (gameType: string): Promise<number | null> => {
+    try {
+      const gameConfig = getGameConfig(gameType);
+      return gameConfig ? gameConfig.id : null;
+    } catch (error) {
+      console.error('Error getting game ID:', error);
+      return null;
     }
   };
 
   const handleGameEnd = async (points: number) => {
     if (activeGame) {
-      await addPoints(points, activeGame);
+      console.log(`🎮 Game completed: ${activeGame} with score: ${points}`);
+      
+      try {
+        // Get game configuration and ID
+        const gameId = await getGameIdBySlug(activeGame);
+        if (!gameId) {
+          console.error('Game not found:', activeGame);
+          setActiveGame(null);
+          return;
+        }
+        
+        console.log(`🔧 Found game ID: ${gameId} for ${activeGame}`);
+        
+        const userResponse = await api.get('/profile');
+        const userId = userResponse.data.user.id;
+        
+        console.log(`👤 User ID: ${userId}`);
+        
+        // Start the game session first
+        const startResponse = await api.post(`/games/${gameId}/start`, { user_id: userId });
+        console.log('🚀 Game session started:', startResponse.data);
+        
+        // Then complete it to award energy points (backend handles the actual scoring)
+        const completeResponse = await api.post(`/games/${gameId}/complete`, { 
+          user_id: userId,
+          score: points 
+        });
+        
+        console.log('✅ Game completed successfully:', completeResponse.data);
+        console.log(`⚡ Energy earned: ${completeResponse.data.energy_earned}`);
+        
+        // Show success message for energy points earned
+        setPopupTitle('🎉 Success!');
+        setCooldownMessage(`Great job! You earned ${completeResponse.data.energy_earned} energy points! Your total energy is now ${completeResponse.data.total_energy}.`);
+        setShowCooldownPopup(true);
+        
+        // Update local stats for display purposes only (not for points)
+        await addPoints(0, activeGame); // Just increment game count, no points
+        
+        // Refresh user profile and dashboard to show updated energy points
+        await refreshUserProfile();
+        await refreshDashboard();
+        
+        // Update cooldown for this game
+        const gameConfig = getGameConfig(activeGame);
+        if (gameConfig) {
+          setGameCooldowns(prev => ({
+            ...prev,
+            [activeGame]: gameConfig.play_cooldown_seconds
+          }));
+        }
+        
+        console.log('🔄 Profile and dashboard refreshed');
+        
+      } catch (error: any) {
+        if (error.response?.status === 429) {
+          // Cooldown error - this is expected behavior
+          const errorData = error.response.data;
+          const remainingMinutes = Math.ceil(errorData.cooldown_seconds_remaining / 60);
+          console.log(`⏰ Game in cooldown: ${Math.ceil(errorData.cooldown_seconds_remaining)} seconds remaining`);
+          
+          // Still update local stats to track the play
+          await addPoints(0, activeGame);
+          
+          // Show user-friendly cooldown message
+          setPopupTitle('⏰ Cooldown Active');
+          setCooldownMessage(`Game completed! However, you need to wait ${remainingMinutes} more minute${remainingMinutes !== 1 ? 's' : ''} before earning energy points from this game again.`);
+          setShowCooldownPopup(true);
+          
+          console.log('ℹ️ Game played locally but no energy points awarded due to cooldown');
+        } else if (error.response?.status === 403 && error.response.data?.message?.includes('Daily play limit')) {
+          // Daily limit reached
+          console.log('📅 Daily play limit reached for this game');
+          
+          // Still update local stats
+          await addPoints(0, activeGame);
+          
+          setPopupTitle('🎮 Daily Limit Reached');
+          setCooldownMessage('Nice game! You have reached the daily energy point limit for this game. Come back tomorrow for more rewards!');
+          setShowCooldownPopup(true);
+          
+          console.log('ℹ️ Game played locally but no energy points awarded due to daily limit');
+        } else {
+          console.error('❌ Error completing game:', error);
+          console.log('Backend API call failed');
+        }
+      }
+      
       setActiveGame(null);
     }
+  };
+
+  const getGameGradient = (gameSlug: string): [string, string] => {
+    const gradients: Record<string, [string, string]> = {
+      'color-match': ['#FF6B6B', '#FF8E53'],
+      'image-similarity': ['#667eea', '#764ba2'],
+      'math-quiz': ['#4facfe', '#00f2fe'],
+      'memory-pattern': ['#fa709a', '#fee140'],
+    };
+    return gradients[gameSlug] || ['#667eea', '#764ba2'];
+  };
+
+  const getGameIcon = (gameSlug: string): string => {
+    const icons: Record<string, string> = {
+      'color-match': '🎨',
+      'image-similarity': '🖼️',
+      'math-quiz': '🧮',
+      'memory-pattern': '🧠',
+    };
+    return icons[gameSlug] || '🎮';
   };
 
   return (
@@ -240,7 +452,16 @@ export default function HomeScreen() {
               
               <View style={styles.todayEarnings}>
                 <Text style={styles.earningsLabel}>Today's Earnings</Text>
-                <Text style={styles.earningsValue}>₹{dynamicData?.todayEarnings ?? 0}</Text>
+                <View style={styles.earningsWithIcon}>
+                  <Icon name="coin" size={20} />
+                  <Text style={styles.earningsValue}>{dynamicData?.totalEarnings ?? 0}</Text>
+                </View>
+                
+                {/* Energy Points Display */}
+                <View style={styles.energyPointsContainer}>
+                  <Text style={styles.energyPointsLabel}>⚡ Energy Points</Text>
+                  <Text style={styles.energyPointsValue}>{dashboard?.energy_points ?? 0}</Text>
+                </View>
               </View>
             </View>
           </LinearGradient>
@@ -257,9 +478,11 @@ export default function HomeScreen() {
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                 >
-                  <Icon name="money" size={24} color="#ffffff" />
+                  <Icon name="coin" size={24} color="#ffffff" />
                 </LinearGradient>
-                <Text style={[styles.statValue, { color: theme.text }]}>₹{dynamicData?.totalEarnings ?? 0}</Text>
+                <View style={styles.statValueWithIcon}>
+                  <Text style={[styles.statValue, { color: theme.text, marginLeft: 4 }]}>{dynamicData?.totalEarnings ?? 0}</Text>
+                </View>
                 <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Total Earnings</Text>
               </View>
 
@@ -295,15 +518,15 @@ export default function HomeScreen() {
 
               <View style={[styles.statCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <LinearGradient
-                  colors={['#fa709a', '#fee140']}
+                  colors={['#FFD700', '#FFA500']}
                   style={styles.statIcon}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                 >
-                  <Icon name="target" size={24} color="#ffffff" />
+                  <Icon name="fire" size={24} color="#ffffff" />
                 </LinearGradient>
-                <Text style={[styles.statValue, { color: theme.text }]}>85%</Text>
-                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Success Rate</Text>
+                <Text style={[styles.statValue, { color: theme.text }]}>{dashboard?.energy_points ?? 0}</Text>
+                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Energy Points</Text>
               </View>
             </View>
           </AnimatedCard>
@@ -350,176 +573,64 @@ export default function HomeScreen() {
               <Text style={[styles.sectionTitle, { color: theme.text }]}>Mini Games</Text>
               <View style={styles.pointsDisplay}>
                 <Text style={[styles.pointsText, { color: theme.primary }]}>
-                  🎮 {stats.totalPoints} pts
+                  ⚡ {dashboard?.energy_points ?? 0} energy
                 </Text>
               </View>
             </View>
             
             <View style={styles.gamesGrid}>
-              {/* Color Match Game */}
-              <TouchableOpacity 
-                style={[
-                  styles.gameCard,
-                  { 
-                    backgroundColor: theme.background,
-                    borderColor: theme.border,
-                    opacity: canPlayGame('color-match') ? 1 : 0.6
-                  }
-                ]}
-                onPress={() => handleGameStart('color-match')}
-                disabled={!canPlayGame('color-match')}
-                activeOpacity={0.8}
-              >
-                <LinearGradient
-                  colors={['#FF6B6B', '#FF8E53']}
-                  style={styles.gameIcon}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <Text style={styles.gameIconText}>🎨</Text>
-                </LinearGradient>
-                <Text style={[styles.gameTitle, { color: theme.text }]}>Color Match</Text>
-                <Text style={[styles.gameDescription, { color: theme.textSecondary }]}>
-                  Find matching colors
-                </Text>
-                {canPlayGame('color-match') ? (
-                  <View style={[styles.playButton, { backgroundColor: theme.primary }]}>
-                    <Text style={styles.playButtonText}>Play Now</Text>
-                  </View>
-                ) : (
-                  <Text style={[styles.cooldownText, { color: theme.textSecondary }]}>
-                    ⏱️ {formatCooldownTime(getGameCooldown('color-match'))}
-                  </Text>
-                )}
-                <Text style={[styles.gameReward, { color: theme.accent }]}>
-                  High: {stats.colorMatchHighScore}
-                </Text>
-              </TouchableOpacity>
-
-              {/* Image Similarity Game */}
-              <TouchableOpacity 
-                style={[
-                  styles.gameCard,
-                  { 
-                    backgroundColor: theme.background,
-                    borderColor: theme.border,
-                    opacity: canPlayGame('image-similarity') ? 1 : 0.6
-                  }
-                ]}
-                onPress={() => handleGameStart('image-similarity')}
-                disabled={!canPlayGame('image-similarity')}
-                activeOpacity={0.8}
-              >
-                <LinearGradient
-                  colors={['#667eea', '#764ba2']}
-                  style={styles.gameIcon}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <Text style={styles.gameIconText}>🖼️</Text>
-                </LinearGradient>
-                <Text style={[styles.gameTitle, { color: theme.text }]}>Image Match</Text>
-                <Text style={[styles.gameDescription, { color: theme.textSecondary }]}>
-                  Find similar images
-                </Text>
-                {canPlayGame('image-similarity') ? (
-                  <View style={[styles.playButton, { backgroundColor: theme.primary }]}>
-                    <Text style={styles.playButtonText}>Play Now</Text>
-                  </View>
-                ) : (
-                  <Text style={[styles.cooldownText, { color: theme.textSecondary }]}>
-                    ⏱️ {formatCooldownTime(getGameCooldown('image-similarity'))}
-                  </Text>
-                )}
-                <Text style={[styles.gameReward, { color: theme.accent }]}>
-                  High: {stats.imageSimilarityHighScore}
-                </Text>
-              </TouchableOpacity>
-
-              {/* Math Quiz Game */}
-              <TouchableOpacity 
-                style={[
-                  styles.gameCard,
-                  { 
-                    backgroundColor: theme.background,
-                    borderColor: theme.border,
-                    opacity: canPlayGame('math-quiz') ? 1 : 0.6
-                  }
-                ]}
-                onPress={() => handleGameStart('math-quiz')}
-                disabled={!canPlayGame('math-quiz')}
-                activeOpacity={0.8}
-              >
-                <LinearGradient
-                  colors={['#4facfe', '#00f2fe']}
-                  style={styles.gameIcon}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <Text style={styles.gameIconText}>🧮</Text>
-                </LinearGradient>
-                <Text style={[styles.gameTitle, { color: theme.text }]}>Math Quiz</Text>
-                <Text style={[styles.gameDescription, { color: theme.textSecondary }]}>
-                  Solve math problems
-                </Text>
-                {canPlayGame('math-quiz') ? (
-                  <View style={[styles.playButton, { backgroundColor: theme.primary }]}>
-                    <Text style={styles.playButtonText}>Play Now</Text>
-                  </View>
-                ) : (
-                  <Text style={[styles.cooldownText, { color: theme.textSecondary }]}>
-                    ⏱️ {formatCooldownTime(getGameCooldown('math-quiz'))}
-                  </Text>
-                )}
-                <Text style={[styles.gameReward, { color: theme.accent }]}>
-                  High: {stats.mathQuizHighScore}
-                </Text>
-              </TouchableOpacity>
-
-              {/* Memory Pattern Game */}
-              <TouchableOpacity 
-                style={[
-                  styles.gameCard,
-                  { 
-                    backgroundColor: theme.background,
-                    borderColor: theme.border,
-                    opacity: canPlayGame('memory-pattern') ? 1 : 0.6
-                  }
-                ]}
-                onPress={() => handleGameStart('memory-pattern')}
-                disabled={!canPlayGame('memory-pattern')}
-                activeOpacity={0.8}
-              >
-                <LinearGradient
-                  colors={['#fa709a', '#fee140']}
-                  style={styles.gameIcon}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <Text style={styles.gameIconText}>🧠</Text>
-                </LinearGradient>
-                <Text style={[styles.gameTitle, { color: theme.text }]}>Memory Pattern</Text>
-                <Text style={[styles.gameDescription, { color: theme.textSecondary }]}>
-                  Remember 4-tile sequences
-                </Text>
-                {canPlayGame('memory-pattern') ? (
-                  <View style={[styles.playButton, { backgroundColor: theme.primary }]}>
-                    <Text style={styles.playButtonText}>Play Now</Text>
-                  </View>
-                ) : (
-                  <Text style={[styles.cooldownText, { color: theme.textSecondary }]}>
-                    ⏱️ {formatCooldownTime(getGameCooldown('memory-pattern'))}
-                  </Text>
-                )}
-                <Text style={[styles.gameReward, { color: theme.accent }]}>
-                  High: {stats.memoryPatternHighScore}
-                </Text>
-              </TouchableOpacity>
+              {gameConfigs.filter(game => game.is_active !== false).map((gameConfig) => {
+                const remainingSeconds = gameCooldowns[gameConfig.slug] || 0;
+                const isInCooldown = remainingSeconds > 0;
+                const remainingMinutes = Math.ceil(remainingSeconds / 60);
+                
+                return (
+                  <TouchableOpacity 
+                    key={gameConfig.id}
+                    style={[
+                      styles.gameCard,
+                      { 
+                        backgroundColor: theme.background,
+                        borderColor: theme.border,
+                        opacity: isInCooldown ? 0.6 : 1
+                      }
+                    ]}
+                    onPress={() => handleGameStart(gameConfig.slug as any)}
+                    disabled={isInCooldown}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={getGameGradient(gameConfig.slug)}
+                      style={styles.gameIcon}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                    >
+                      <Text style={styles.gameIconText}>{getGameIcon(gameConfig.slug)}</Text>
+                    </LinearGradient>
+                    <Text style={[styles.gameTitle, { color: theme.text }]}>{gameConfig.name}</Text>
+                    <Text style={[styles.gameDescription, { color: theme.textSecondary }]}>
+                      {gameConfig.description}
+                    </Text>
+                    {isInCooldown ? (
+                      <Text style={[styles.cooldownText, { color: theme.textSecondary }]}>
+                        ⏱️ {remainingMinutes}m remaining
+                      </Text>
+                    ) : (
+                      <View style={[styles.playButton, { backgroundColor: theme.primary }]}>
+                        <Text style={styles.playButtonText}>Play Now</Text>
+                      </View>
+                    )}
+                    <Text style={[styles.gameReward, { color: theme.accent }]}>
+                      Reward: ⚡{gameConfig.energy_reward}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
 
             <View style={styles.dailyLimitInfo}>
               <Text style={[styles.dailyLimitText, { color: theme.textSecondary }]}>
-                Daily Points: {stats.dailyPoints}/100 • Games Played: {stats.gamesPlayed}
+                Energy Points: ⚡{dashboard?.energy_points ?? 0} • Games Played: {stats.gamesPlayed}
               </Text>
             </View>
           </View>
@@ -589,6 +700,15 @@ export default function HomeScreen() {
           onClose={() => setActiveGame(null)}
         />
       </Modal>
+
+      {/* Game Completion Popup */}
+      <ThemedPopup
+        visible={showCooldownPopup}
+        title={popupTitle}
+        message={cooldownMessage}
+        onConfirm={() => setShowCooldownPopup(false)}
+        confirmText="OK"
+      />
     </SafeAreaView>
   );
 }
@@ -641,6 +761,32 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 26,
     fontWeight: 'bold',
     color: '#ffffff',
+    marginLeft: 8,
+  },
+  earningsWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  energyPointsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.2)',
+    width: '100%',
+  },
+  energyPointsLabel: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontWeight: '500',
+  },
+  energyPointsValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFD700',
   },
   statsContainer: {
     paddingHorizontal: 20,
@@ -674,6 +820,12 @@ const createStyles = (theme: any) => StyleSheet.create({
   statValue: {
     fontSize: 18,
     fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  statValueWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 4,
   },
   statLabel: {

@@ -3,18 +3,33 @@ import { View, StyleSheet, Alert } from 'react-native';
 import { Stack } from 'expo-router';
 import { UnityGameView } from '../components/UnityGameView';
 import { useRouter } from 'expo-router';
+import { api } from '../services/api';
+import { useUserStore } from '../stores/userStore';
 
 export default function UnityGameScreen() {
   const router = useRouter();
+  const { setProfile } = useUserStore();
   const [gameUrl] = useState('http://localhost:3000'); // Local Unity WebGL build
 
-  const handleSessionEnd = (summary: any) => {
+  const refreshUserProfile = async () => {
+    try {
+      const response = await api.get('/profile');
+      setProfile(response.data.user);
+    } catch (error) {
+      console.error('Failed to refresh user profile:', error);
+    }
+  };
+
+  const handleSessionEnd = async (summary: any) => {
     console.log('Unity game session ended:', summary);
+    
+    // Refresh user profile to get updated energy points
+    await refreshUserProfile();
     
     // Show results and navigate back
     Alert.alert(
       'Game Completed! 🎉',
-      `Great job! You earned ${summary.points_awarded || 0} points!
+      `Great job! You earned ${summary.points_awarded || 0} energy points!
       
 Levels Completed: ${summary.levels_completed || 0}
 Score: ${summary.score_earned || 0}
@@ -35,9 +50,10 @@ Duration: ${Math.round((summary.duration || 0) / 60)} minutes`,
     );
   };
 
-  const handlePointsEarned = (points: number) => {
-    console.log(`Earned ${points} points during gameplay!`);
-    // You could show a toast notification here
+  const handlePointsEarned = async (points: number) => {
+    console.log(`Earned ${points} energy points during gameplay!`);
+    // Refresh user profile to show updated energy points
+    await refreshUserProfile();
   };
 
   const handleError = (error: string) => {

@@ -10,13 +10,14 @@ import {
   Animated,
   Modal,
   TextInput,
-  Alert,
   RefreshControl,
   Dimensions
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../hooks/useTheme';
 import { api } from '../../services/api';
+import Icon from '../../components/Icon';
+import ThemedPopup from '../../components/ThemedPopup';
 
 const { height: screenHeight } = Dimensions.get('window');
 const HEADER_HEIGHT = screenHeight * 0.30; // 30% of screen height
@@ -43,6 +44,16 @@ export default function WalletScreen() {
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [selectedMethod, setSelectedMethod] = useState<any>(null);
   const [paymentDetails, setPaymentDetails] = useState('');
+  const [popup, setPopup] = useState<{ visible: boolean; title: string; message: string; onConfirm?: () => void } | null>(null);
+
+  const showPopup = (title: string, message: string) => {
+    setPopup({
+      visible: true,
+      title,
+      message,
+      onConfirm: () => setPopup(null)
+    });
+  };
 
   useEffect(() => {
     loadWalletData();
@@ -85,7 +96,7 @@ export default function WalletScreen() {
       setWithdrawalMethods(methodsRes.data?.data || []);
     } catch (error) {
       console.error('Failed to load wallet data:', error);
-      Alert.alert('Error', 'Failed to load wallet data. Please try again.');
+      showPopup('Error', 'Failed to load wallet data. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -132,23 +143,23 @@ export default function WalletScreen() {
 
   const handleWithdraw = async () => {
     if (!selectedMethod) {
-      Alert.alert('Error', 'Please select a withdrawal method');
+      showPopup('Error', 'Please select a withdrawal method');
       return;
     }
     if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) {
-      Alert.alert('Error', 'Please enter a valid amount');
+      showPopup('Error', 'Please enter a valid amount');
       return;
     }
     if (parseFloat(withdrawAmount) < selectedMethod.min_amount) {
-      Alert.alert('Error', `Minimum withdrawal amount for ${selectedMethod.name} is ₹${selectedMethod.min_amount}`);
+      showPopup('Error', `Minimum withdrawal amount for ${selectedMethod.name} is ₹${selectedMethod.min_amount}`);
       return;
     }
     if (parseFloat(withdrawAmount) > walletData.balance) {
-      Alert.alert('Error', 'Insufficient balance');
+      showPopup('Error', 'Insufficient balance');
       return;
     }
     if (!paymentDetails.trim()) {
-      Alert.alert('Error', 'Please enter payment details');
+      showPopup('Error', 'Please enter payment details');
       return;
     }
 
@@ -159,7 +170,7 @@ export default function WalletScreen() {
         payment_details: paymentDetails,
       });
 
-      Alert.alert('Success! 🎉', res.data.message || 'Withdrawal request submitted successfully!');
+      showPopup('Success! 🎉', res.data.message || 'Withdrawal request submitted successfully!');
       setShowWithdrawModal(false);
       setWithdrawAmount('');
       setSelectedMethod(null);
@@ -167,7 +178,7 @@ export default function WalletScreen() {
       await loadWalletData(); // Reload wallet data
     } catch (error: any) {
       const errorMsg = error.response?.data?.message || 'Failed to process withdrawal';
-      Alert.alert('Error', errorMsg);
+      showPopup('Error', errorMsg);
     }
   };
 
@@ -207,11 +218,17 @@ export default function WalletScreen() {
               
               <View style={styles.balanceCard}>
                 <Text style={styles.balanceLabel}>Available Balance</Text>
-                <Text style={styles.balanceValue}>
-                  ₹{walletData.balance.toFixed(2)}
-                </Text>
+                <View style={styles.balanceWithIcon}>
+                  <Icon name="coin" size={24} />
+                  <Text style={styles.balanceValue}>
+                    {walletData.balance.toFixed(2)}
+                  </Text>
+                </View>
                 <View style={styles.pendingInfo}>
-                  <Text style={styles.pendingText}>₹{walletData.pending_amount.toFixed(2)} pending • ⚡{walletData.energy_points} energy</Text>
+                  <View style={styles.pendingWithIcon}>
+                    <Icon name="coin" size={14} />
+                    <Text style={styles.pendingText}>{walletData.pending_amount.toFixed(2)} pending • ⚡{walletData.energy_points} energy</Text>
+                  </View>
                 </View>
               </View>
             </View>
@@ -228,7 +245,10 @@ export default function WalletScreen() {
               >
                 <Text style={styles.statIconText}>📊</Text>
               </LinearGradient>
-              <Text style={[styles.statValue, { color: theme.text }]}>₹{walletData.total_withdrawn.toFixed(2)}</Text>
+              <View style={styles.statValueWithIcon}>
+                <Icon name="coin" size={16} />
+                <Text style={[styles.statValue, { color: theme.text, marginLeft: 4 }]}>{walletData.total_withdrawn.toFixed(2)}</Text>
+              </View>
               <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Total Withdrawn</Text>
             </View>
 
@@ -239,7 +259,10 @@ export default function WalletScreen() {
               >
                 <Text style={styles.statIconText}>⚡</Text>
               </LinearGradient>
-              <Text style={[styles.statValue, { color: theme.text }]}>₹{walletData.pending_amount.toFixed(2)}</Text>
+              <View style={styles.statValueWithIcon}>
+                <Icon name="coin" size={16} />
+                <Text style={[styles.statValue, { color: theme.text, marginLeft: 4 }]}>{walletData.pending_amount.toFixed(2)}</Text>
+              </View>
               <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Pending Amount</Text>
             </View>
           </View>
@@ -318,12 +341,20 @@ export default function WalletScreen() {
                     </View>
                   </View>
                   <View style={styles.transactionAmount}>
-                    <Text style={[
-                      styles.amountText,
-                      { color: transaction.type === 'earning' ? theme.success : theme.error }
-                    ]}>
-                      {transaction.type === 'earning' ? '+' : '-'}₹{Math.abs(transaction.amount).toFixed(2)}
-                    </Text>
+                    <View style={styles.transactionAmountContainer}>
+                      {transaction.type === 'earning' && <Icon name="coin" size={14} />}
+                      <Text style={[
+                        styles.amountText,
+                        { 
+                          color: transaction.type === 'earning' ? theme.success : theme.error,
+                          marginLeft: transaction.type === 'earning' ? 4 : 0
+                        }
+                      ]}>
+                        {transaction.type === 'earning' ? '+' : '-'}
+                        {transaction.type === 'earning' ? '' : '₹'}
+                        {Math.abs(transaction.amount).toFixed(2)}
+                      </Text>
+                    </View>
                     <Text style={[
                       styles.statusText,
                     { 
@@ -427,6 +458,16 @@ export default function WalletScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Themed Popup */}
+      {popup?.visible && (
+        <ThemedPopup
+          visible={popup.visible}
+          title={popup.title}
+          message={popup.message}
+          onConfirm={popup.onConfirm}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -481,6 +522,12 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontWeight: 'bold',
     color: '#ffffff',
     marginBottom: 8,
+    marginLeft: 8,
+  },
+  balanceWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   pendingInfo: {
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
@@ -491,6 +538,12 @@ const createStyles = (theme: any) => StyleSheet.create({
   pendingText: {
     fontSize: 11,
     color: 'rgba(255, 255, 255, 0.9)',
+    marginLeft: 4,
+  },
+  pendingWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   statsContainer: {
     flexDirection: 'row',
@@ -519,6 +572,12 @@ const createStyles = (theme: any) => StyleSheet.create({
   statValue: {
     fontSize: 18,
     fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  statValueWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 4,
   },
   statLabel: {
@@ -632,6 +691,11 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 2,
+  },
+  transactionAmountContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
   },
   statusText: {
     fontSize: 12,

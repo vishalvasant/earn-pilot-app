@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useRef } from 'react';
+/* eslint-disable react-hooks/exhaustive-deps */
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { 
-  Alert, 
   SafeAreaView, 
   Text, 
   TextInput, 
@@ -13,30 +13,52 @@ import {
   Modal,
   Switch,
   Dimensions,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { getProfile, updateProfile } from '../../services/api';
 import { useTheme } from '../../hooks/useTheme';
 import { useAuthStore } from '../../stores/authStore';
+import { useUserStore } from '../../stores/userStore';
 import Icon from '../../components/Icon';
+import OptimizedTextInput from '../../components/OptimizedTextInput';
+import IsolatedTextInput from '../../components/IsolatedTextInput';
+import ProfileEditForm from '../../components/ProfileEditForm';
+import ThemedPopup from '../../components/ThemedPopup';
 
 const { height: screenHeight } = Dimensions.get('window');
 const HEADER_HEIGHT = screenHeight * 0.30;
 
-export default function ProfileScreen() {
+function ProfileScreen() {
   const theme = useTheme();
-  const styles = createStyles(theme);
   const router = useRouter();
   const logout = useAuthStore((s) => s.logout);
+  const userStore = useUserStore();
   
   const [user, setUser] = useState<any | null>(null);
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
   const [location, setLocation] = useState('');
   const [isEditing, setIsEditing] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [notifications, setNotifications] = useState(true);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [popup, setPopup] = useState<{ visible: boolean; title: string; message: string; onConfirm?: () => void } | null>(null);
+  
+  // Create styles once and reuse
+  const styles = useMemo(() => createStyles(theme), [theme]);
+  
+  // Create stable style objects
+  const inputStyle = useMemo(() => [
+    styles.fieldInput, 
+    { 
+      borderColor: theme.border, 
+      color: theme.text, 
+      backgroundColor: theme.background 
+    }
+  ], [styles.fieldInput, theme.border, theme.text, theme.background]);
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -60,14 +82,22 @@ export default function ProfileScreen() {
 
   const loadProfile = async () => {
     try {
+      console.log('🔄 Loading profile...');
       const data = await getProfile();
+      console.log('📄 Profile data received:', data);
+      
       // Accept flexible shapes: { user: {...} } | { data: { user } } | direct user
       const u = (data && (data.user || data.data?.user || data)) || {};
+      console.log('👤 Processed user data:', u);
+      
       setUser(u);
       setName((u.name as string) || '');
       setAge(u.age != null ? String(u.age) : '');
       setLocation((u.location as string) || '');
-    } catch {
+      
+      console.log('✅ Profile loaded successfully');
+    } catch (error) {
+      console.error('❌ Profile loading error:', error);
       // Leave fields empty on failure (UI shows placeholders)
       setUser(null);
       setName('');
@@ -76,22 +106,17 @@ export default function ProfileScreen() {
     }
   };
 
-  const onSave = async () => {
-    try {
-      await updateProfile({ name, age: Number(age) || undefined, location });
-      Alert.alert('Success', 'Profile updated successfully!');
-      setIsEditing(false);
-    } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.message || 'Update failed');
-    }
-  };
-
   const handleLogout = async () => {
     try {
       await logout();
       router.replace('/(auth)/login');
     } catch (error) {
-      Alert.alert('Error', 'Failed to logout. Please try again.');
+      setPopup({
+        visible: true,
+        title: 'Error',
+        message: 'Failed to logout. Please try again.',
+        onConfirm: () => setPopup(null)
+      });
     }
   };
 
@@ -164,7 +189,17 @@ export default function ProfileScreen() {
         backgroundColor={theme.background}
       />
       
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <ScrollView 
+          style={styles.scrollView} 
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ paddingBottom: 20 }}
+        >
         {/* Header */}
         <Animated.View 
           style={[
@@ -209,9 +244,11 @@ export default function ProfileScreen() {
             <View style={styles.statsGrid}>
               <View style={[styles.statCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <LinearGradient colors={theme.gradient.primary as [string, string, ...string[]]} style={styles.statIcon}>
-                  <Icon name="money" size={24} color="#ffffff" />
+                  <Icon name="coin" size={24} color="#ffffff" />
                 </LinearGradient>
-                <Text style={[styles.statValue, { color: theme.text }]}>₹{user?.total_earned ?? 0}</Text>
+                <View style={styles.statValueContainer}>
+                  <Text style={[styles.statValue, { color: theme.text, marginLeft: 4 }]}>{user?.total_earned ?? 0}</Text>
+                </View>
                 <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Total Earned</Text>
               </View>
 
@@ -246,7 +283,7 @@ export default function ProfileScreen() {
           </AnimatedCard>
         </View>
         {/* Theme (static) */}
-        <AnimatedCard delay={800}>
+        {/* <AnimatedCard delay={800}>
           <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.border }]}> 
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Appearance</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12 }}>
@@ -260,7 +297,7 @@ export default function ProfileScreen() {
               </View>
             </View>
           </View>
-        </AnimatedCard>
+        </AnimatedCard> */}
 
         {/* Profile Details */}
         <AnimatedCard delay={600}>
@@ -278,63 +315,73 @@ export default function ProfileScreen() {
             </View>
 
             <View style={styles.profileFields}>
-              <View style={styles.field}>
-                <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Name</Text>
-                {isEditing ? (
-                  <TextInput
-                    value={name}
-                    onChangeText={setName}
-                    style={[styles.fieldInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.background }]}
-                    placeholder="Enter your name"
-                    placeholderTextColor={theme.placeholder}
-                  />
-                ) : (
-                  <Text style={[styles.fieldValue, { color: theme.text }]}>{name}</Text>
-                )}
-              </View>
+              {isEditing ? (
+                <ProfileEditForm
+                  user={user}
+                  theme={theme}
+                  styles={styles}
+                  onSave={async (data) => {
+                    setIsLoading(true);
+                    try {
+                      const response = await updateProfile(data);
+                      setUser(response.user);
+                      setName(response.user.name || '');
+                      setAge(response.user.age ? String(response.user.age) : '');
+                      setLocation(response.user.location || '');
+                      setPopup({
+                        visible: true,
+                        title: 'Success! 🎉',
+                        message: 'Profile updated successfully!',
+                        onConfirm: () => {
+                          setPopup(null);
+                          setIsEditing(false);
+                        }
+                      });
+                    } catch (error: any) {
+                      const errorMessage = error.response?.data?.message || 
+                                          error.response?.data?.errors || 
+                                          error.message || 
+                                          'Failed to update profile';
+                      setPopup({
+                        visible: true,
+                        title: 'Error',
+                        message: typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage),
+                        onConfirm: () => setPopup(null)
+                      });
+                    } finally {
+                      setIsLoading(false);
+                    }
+                  }}
+                  onCancel={() => setIsEditing(false)}
+                  isLoading={isLoading}
+                  onShowPopup={(title, message) => {
+                    setPopup({
+                      visible: true,
+                      title,
+                      message,
+                      onConfirm: () => setPopup(null)
+                    });
+                  }}
+                />
+              ) : (
+                <>
+                  <View style={styles.field}>
+                    <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Name</Text>
+                    <Text style={[styles.fieldValue, { color: theme.text }]}>{name}</Text>
+                  </View>
 
-              <View style={styles.field}>
-                <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Age</Text>
-                {isEditing ? (
-                  <TextInput
-                    value={age}
-                    onChangeText={setAge}
-                    style={[styles.fieldInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.background }]}
-                    placeholder="Enter your age"
-                    placeholderTextColor={theme.placeholder}
-                    keyboardType="number-pad"
-                  />
-                ) : (
-                  <Text style={[styles.fieldValue, { color: theme.text }]}>{age}</Text>
-                )}
-              </View>
+                  <View style={styles.field}>
+                    <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Age</Text>
+                    <Text style={[styles.fieldValue, { color: theme.text }]}>{age}</Text>
+                  </View>
 
-              <View style={styles.field}>
-                <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Location</Text>
-                {isEditing ? (
-                  <TextInput
-                    value={location}
-                    onChangeText={setLocation}
-                    style={[styles.fieldInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.background }]}
-                    placeholder="Enter your location"
-                    placeholderTextColor={theme.placeholder}
-                  />
-                ) : (
-                  <Text style={[styles.fieldValue, { color: theme.text }]}>{location}</Text>
-                )}
-              </View>
+                  <View style={styles.field}>
+                    <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Location</Text>
+                    <Text style={[styles.fieldValue, { color: theme.text }]}>{location}</Text>
+                  </View>
+                </>
+              )}
             </View>
-
-            {isEditing && (
-              <TouchableOpacity onPress={onSave} style={styles.saveButton}>
-                <LinearGradient
-                  colors={theme.gradient.primary as [string, string, ...string[]]}
-                  style={styles.saveGradient}
-                >
-                  <Text style={styles.saveButtonText}>Save Changes</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            )}
           </View>
         </AnimatedCard>
         
@@ -405,7 +452,18 @@ export default function ProfileScreen() {
             </View>
           </TouchableOpacity>
         </AnimatedCard>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      {/* Themed Popup */}
+      {popup?.visible && (
+        <ThemedPopup
+          visible={popup.visible}
+          title={popup.title}
+          message={popup.message}
+          onConfirm={popup.onConfirm}
+        />
+      )}
 
       {/* Logout Confirmation Modal */}
       <Modal
@@ -552,6 +610,12 @@ const createStyles = (theme: any) => StyleSheet.create({
   statValue: {
     fontSize: 18,
     fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  statValueContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 4,
   },
   statLabel: {
@@ -745,3 +809,5 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontWeight: '600',
   },
 });
+
+export default ProfileScreen;

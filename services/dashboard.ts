@@ -5,6 +5,7 @@ export interface DashboardResponse {
   success: boolean;
   data: {
     points_balance: string;
+    energy_points: string;
     total_earned: string;
     referral_code: string;
     status: string;
@@ -22,6 +23,7 @@ export const getDashboardDetails = async (): Promise<DashboardResponse> => {
     success: data.success,
     data: {
       points_balance: data.user.points_balance,
+      energy_points: data.user.energy_points,
       total_earned: data.user.total_earned,
       referral_code: data.user.referral_code,
       status: data.user.status,

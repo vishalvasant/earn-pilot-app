@@ -17,6 +17,7 @@ export const Icons = {
   money: { family: FontAwesome5, name: 'rupee-sign' },
   earnings: { family: MaterialIcons, name: 'account-balance-wallet' },
   coins: { family: FontAwesome5, name: 'coins' },
+  coin: '🪙', // Coin emoji for reward points
   
   // Status & Progress
   checkmark: { family: Ionicons, name: 'checkmark-circle' },

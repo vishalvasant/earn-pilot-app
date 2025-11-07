@@ -22,6 +22,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../hooks/useTheme';
 import { sendOtp } from '../../services/api';
 import ThemedPopup from '../../components/ThemedPopup';
+import Icon from '../../components/Icon';
 
 const { width, height } = Dimensions.get('window');
 
@@ -502,7 +503,10 @@ const LoginScreen = () => {
                   </View>
                   <View style={styles.statDivider} />
                   <View style={styles.statItem}>
-                    <Text style={[styles.statNumber, { color: theme.primary }]}>₹2.5L+</Text>
+                    <View style={styles.statWithIcon}>
+                      <Icon name="coin" size={16} />
+                      <Text style={[styles.statNumber, { color: theme.primary, marginLeft: 4 }]}>2.5L+</Text>
+                    </View>
                     <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Earned</Text>
                   </View>
                   <View style={styles.statDivider} />
@@ -626,6 +630,12 @@ const createStyles = (theme: any) => StyleSheet.create({
   statNumber: {
     fontSize: 16,
     fontWeight: '700',
+    marginBottom: 2,
+  },
+  statWithIcon: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 2,
   },
   statLabel: {

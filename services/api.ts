@@ -115,7 +115,23 @@ export const updateProfile = async (data: {
   age?: number;
   location?: string;
 }) => {
-  const response = await api.put('/profile', data);
+  // Clean the data to remove empty strings, null, and undefined values
+  const cleanData = Object.fromEntries(
+    Object.entries(data).filter(([_, value]) => {
+      // Remove undefined, null, and empty strings
+      return value !== undefined && value !== null && value !== '';
+    }).map(([key, value]) => {
+      // Ensure strings are trimmed
+      if (typeof value === 'string') {
+        return [key, value.trim()];
+      }
+      return [key, value];
+    })
+  );
+  
+  console.log('📤 Sending profile update request with data:', cleanData);
+  const response = await api.put('/profile', cleanData);
+  console.log('📥 Profile update response:', response.data);
   return response.data;
 };
 

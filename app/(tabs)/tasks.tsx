@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { 
   ActivityIndicator,
-  Alert,
   FlatList, 
   SafeAreaView, 
   Text, 
@@ -14,12 +13,28 @@ import {
   RefreshControl
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { api } from '../../services/api';
 import { useTheme } from '../../hooks/useTheme';
 import Icon from '../../components/Icon';
+import ThemedPopup from '../../components/ThemedPopup';
 
 const { width, height: screenHeight } = Dimensions.get('window');
 const HEADER_HEIGHT = screenHeight * 0.30; // 30% of screen height
+
+// Task interface for type safety
+interface Task {
+  id: number;
+  title: string;
+  description: string;
+  points: number;
+  energy_cost: number;
+  is_completed: boolean;
+  disabled: boolean;
+  estimated_time: string;
+  difficulty: string;
+  subtasks: any[];
+}
 
 // Create styles function (defined here for use in TaskCard)
 const createStyles = (theme: any) => StyleSheet.create({
@@ -213,7 +228,13 @@ const createStyles = (theme: any) => StyleSheet.create({
 });
 
 // Enhanced TaskCard component with animations
-const TaskCard = ({ task, index, theme, onComplete }: { task: any; index: number; theme: any; onComplete: (task: any) => void }) => {
+const TaskCard = ({ task, index, theme, onComplete, router }: { 
+  task: any; 
+  index: number; 
+  theme: any; 
+  onComplete: (task: any) => void;
+  router: any;
+}) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
@@ -253,7 +274,10 @@ const TaskCard = ({ task, index, theme, onComplete }: { task: any; index: number
         duration: 100,
         useNativeDriver: true,
       }),
-    ]).start();
+    ]).start(() => {
+      // Navigate to task detail page after animation completes
+      router.push(`/task-detail?taskId=${task.id}`);
+    });
   };
 
   const getStatusColor = (status: string) => {
@@ -408,13 +432,57 @@ const TaskCard = ({ task, index, theme, onComplete }: { task: any; index: number
 
 export default function TasksScreen() {
   const theme = useTheme();
+  const router = useRouter();
   const styles = createStyles(theme);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [tasks, setTasks] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [filter, setFilter] = useState('all');
   const [userEnergy, setUserEnergy] = useState(0);
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  // Popup state management
+  const [popupVisible, setPopupVisible] = useState(false);
+  const [popupConfig, setPopupConfig] = useState({
+    title: '',
+    message: '',
+    confirmText: 'OK',
+    cancelText: '',
+    onConfirm: () => {},
+    onCancel: () => {}
+  });
+
+  const showPopup = (title: string, message: string, confirmText = 'OK', onConfirm = () => {}) => {
+    setPopupConfig({ 
+      title, 
+      message, 
+      confirmText, 
+      cancelText: '', 
+      onConfirm: () => {
+        setPopupVisible(false);
+        onConfirm();
+      }, 
+      onCancel: () => {} 
+    });
+    setPopupVisible(true);
+  };
+
+  const showConfirmPopup = (title: string, message: string, onConfirm: () => void) => {
+    setPopupConfig({ 
+      title, 
+      message, 
+      confirmText: 'Complete', 
+      cancelText: 'Cancel',
+      onConfirm: () => {
+        setPopupVisible(false);
+        onConfirm();
+      },
+      onCancel: () => {
+        setPopupVisible(false);
+      }
+    });
+    setPopupVisible(true);
+  };
 
   useEffect(() => {
     loadTasks();
@@ -449,7 +517,7 @@ export default function TasksScreen() {
       setTasks(formattedTasks);
     } catch (error) {
       console.error('Failed to load tasks:', error);
-      Alert.alert('Error', 'Failed to load tasks. Please try again.');
+      showPopup('Error', 'Failed to load tasks. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -477,37 +545,30 @@ export default function TasksScreen() {
 
     // Check energy requirement
     if (task.energy_cost > 0 && userEnergy < task.energy_cost) {
-      Alert.alert(
+      showPopup(
         'Insufficient Energy',
-        `This task requires ${task.energy_cost} energy points. You have ${userEnergy}. Play mini-games to earn more energy!`,
-        [{ text: 'OK' }]
+        `This task requires ${task.energy_cost} energy points. You have ${userEnergy}. Play mini-games to earn more energy!`
       );
       return;
     }
 
-    Alert.alert(
+    showConfirmPopup(
       'Complete Task',
-      `Complete "${task.title}" for ${task.points} points?${task.energy_cost > 0 ? `\n\n⚡ Will use ${task.energy_cost} energy` : ''}`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Complete',
-          onPress: async () => {
-            try {
-              // Step 1: Start the task (deducts energy if needed). Idempotent.
-              await api.post(`/tasks/${task.id}/start`);
+      `Complete "${task.title}" for ${task.reward_points} points?${task.energy_cost > 0 ? `\n\n⚡ Will use ${task.energy_cost} energy` : ''}`,
+      async () => {
+        try {
+          // Step 1: Start the task (deducts energy if needed). Idempotent.
+          await api.post(`/tasks/${task.id}/start`);
 
-              // Step 2: Complete the task
-              const res = await api.post(`/tasks/${task.id}/complete`);
-              Alert.alert('Success! 🎉', res.data.message || 'Task completed successfully!');
-              await handleRefresh(); // Reload tasks and energy
-            } catch (error: any) {
-              const errorMsg = error.response?.data?.message || 'Failed to complete task';
-              Alert.alert('Error', errorMsg);
-            }
-          }
+          // Step 2: Complete the task
+          const res = await api.post(`/tasks/${task.id}/complete`);
+          showPopup('Success! 🎉', res.data.message || 'Task completed successfully!');
+          await handleRefresh(); // Reload tasks and energy
+        } catch (error: any) {
+          const errorMsg = error.response?.data?.message || 'Failed to complete task';
+          showPopup('Error', errorMsg);
         }
-      ]
+      }
     );
   };
 
@@ -614,7 +675,7 @@ export default function TasksScreen() {
           data={filteredTasks}
           keyExtractor={(item) => String(item.id)}
           renderItem={({ item, index }) => (
-            <TaskCard task={item} index={index} theme={theme} onComplete={handleCompleteTask} />
+            <TaskCard task={item} index={index} theme={theme} onComplete={handleCompleteTask} router={router} />
           )}
           refreshControl={
             <RefreshControl
@@ -636,6 +697,17 @@ export default function TasksScreen() {
           showsVerticalScrollIndicator={false}
         />
       </Animated.View>
+
+      <ThemedPopup
+        visible={popupVisible}
+        title={popupConfig.title}
+        message={popupConfig.message}
+        confirmText={popupConfig.confirmText}
+        cancelText={popupConfig.cancelText || undefined}
+        onConfirm={popupConfig.onConfirm}
+        onCancel={popupConfig.onCancel}
+        onClose={() => setPopupVisible(false)}
+      />
     </SafeAreaView>
   );
 }
