@@ -45,6 +45,12 @@ export default function WalletScreen() {
   const [selectedMethod, setSelectedMethod] = useState<any>(null);
   const [paymentDetails, setPaymentDetails] = useState('');
   const [popup, setPopup] = useState<{ visible: boolean; title: string; message: string; onConfirm?: () => void } | null>(null);
+  
+  // Energy conversion state
+  const [showConversionModal, setShowConversionModal] = useState(false);
+  const [energyAmount, setEnergyAmount] = useState('');
+  const [conversionRate, setConversionRate] = useState({ rate: 10, minRequired: 50, enabled: true });
+  const [convertingEnergy, setConvertingEnergy] = useState(false);
 
   const showPopup = (title: string, message: string) => {
     setPopup({
@@ -85,15 +91,21 @@ export default function WalletScreen() {
   const loadWalletData = async () => {
     try {
       setLoading(true);
-      const [balanceRes, activityRes, methodsRes] = await Promise.all([
+      const [balanceRes, activityRes, methodsRes, conversionRes] = await Promise.all([
         api.get('/wallet/balance'),
         api.get('/wallet/activity'),
         api.get('/wallet/withdrawal-methods'),
+        api.get('/wallet/conversion-rate'),
       ]);
 
       setWalletData(balanceRes.data?.data || { balance: 0, energy_points: 0, pending_amount: 0, total_withdrawn: 0 });
       setTransactions(activityRes.data?.data || []);
       setWithdrawalMethods(methodsRes.data?.data || []);
+      setConversionRate({
+        rate: conversionRes.data?.data?.conversion_rate || 10,
+        minRequired: conversionRes.data?.data?.min_energy_required || 50,
+        enabled: conversionRes.data?.data?.conversion_enabled !== false
+      });
     } catch (error) {
       console.error('Failed to load wallet data:', error);
       showPopup('Error', 'Failed to load wallet data. Please try again.');
@@ -182,6 +194,56 @@ export default function WalletScreen() {
     }
   };
 
+  const handleEnergyConversion = async () => {
+    if (!conversionRate.enabled) {
+      showPopup('Error', 'Energy conversion is currently disabled');
+      return;
+    }
+    
+    if (!energyAmount || parseInt(energyAmount) <= 0) {
+      showPopup('Error', 'Please enter a valid energy amount');
+      return;
+    }
+    
+    const energyAmountInt = parseInt(energyAmount);
+    
+    if (energyAmountInt < conversionRate.minRequired) {
+      showPopup('Error', `Minimum ${conversionRate.minRequired} energy points required for conversion`);
+      return;
+    }
+    
+    if (energyAmountInt > walletData.energy_points) {
+      showPopup('Error', 'Insufficient energy points');
+      return;
+    }
+
+    try {
+      setConvertingEnergy(true);
+      const res = await api.post('/wallet/convert-energy', {
+        energy_amount: energyAmountInt,
+      });
+
+      const data = res.data.data;
+      showPopup('Success! 🎉', 
+        `Converted ${data.energy_used} energy points to ${data.points_received} regular points! Your new balance is ${data.new_points_balance} points.`
+      );
+      
+      setShowConversionModal(false);
+      setEnergyAmount('');
+      await loadWalletData(); // Reload wallet data
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.message || 'Failed to convert energy points';
+      showPopup('Error', errorMsg);
+    } finally {
+      setConvertingEnergy(false);
+    }
+  };
+
+  const calculateConvertedPoints = (energy: string) => {
+    if (!energy || parseInt(energy) <= 0) return 0;
+    return Math.floor(parseInt(energy) / conversionRate.rate);
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <StatusBar 
@@ -234,6 +296,52 @@ export default function WalletScreen() {
             </View>
           </LinearGradient>
         </Animated.View>
+
+        {/* Energy Conversion Section */}
+        {walletData.energy_points > 0 && conversionRate.enabled && (
+          <AnimatedCard delay={150}>
+            <View style={[styles.conversionSection, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <View style={styles.conversionHeader}>
+                <Text style={[styles.conversionTitle, { color: theme.text }]}>⚡ Convert Energy Points</Text>
+                <Text style={[styles.conversionSubtitle, { color: theme.textSecondary }]}>
+                  Turn your energy points into regular points
+                </Text>
+              </View>
+              
+              <View style={styles.conversionContent}>
+                <View style={styles.conversionRate}>
+                  <Text style={[styles.rateText, { color: theme.textSecondary }]}>
+                    Conversion Rate: {conversionRate.rate} energy = 1 point
+                  </Text>
+                  <Text style={[styles.minText, { color: theme.textSecondary }]}>
+                    Minimum: {conversionRate.minRequired} energy points
+                  </Text>
+                </View>
+                
+                <TouchableOpacity 
+                  style={styles.convertButton}
+                  onPress={() => setShowConversionModal(true)}
+                  activeOpacity={0.8}
+                  disabled={!conversionRate.enabled || walletData.energy_points < conversionRate.minRequired}
+                >
+                  <LinearGradient
+                    colors={conversionRate.enabled && walletData.energy_points >= conversionRate.minRequired 
+                      ? ['#FFD700', '#FFA500'] 
+                      : ['#CCCCCC', '#999999']
+                    }
+                    style={styles.convertGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                  >
+                    <Text style={styles.convertText}>
+                      ⚡ Convert {walletData.energy_points} Energy Points
+                    </Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </AnimatedCard>
+        )}
 
         {/* Quick Stats */}
         <AnimatedCard delay={200}>
@@ -452,6 +560,73 @@ export default function WalletScreen() {
                   style={styles.confirmButton}
                 >
                   <Text style={styles.confirmButtonText}>Withdraw</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Energy Conversion Modal */}
+      <Modal
+        visible={showConversionModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowConversionModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.conversionModalContent, { backgroundColor: theme.card }]}>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Convert Energy Points</Text>
+            
+            <View style={styles.modalSection}>
+              <Text style={[styles.modalLabel, { color: theme.text }]}>Energy Points to Convert</Text>
+              <Text style={[styles.rateText, { color: theme.textSecondary, marginBottom: 8 }]}>
+                Rate: {conversionRate.rate} energy points = 1 point
+              </Text>
+              <TextInput
+                style={[styles.conversionInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.background }]}
+                placeholder={`Enter energy points (min: ${conversionRate.minRequired})`}
+                placeholderTextColor={theme.placeholder}
+                value={energyAmount}
+                onChangeText={setEnergyAmount}
+                keyboardType="numeric"
+              />
+            </View>
+
+            {energyAmount && parseInt(energyAmount) > 0 && (
+              <View style={[styles.conversionPreview, { backgroundColor: theme.primaryLight + '20' }]}>
+                <Text style={[styles.previewText, { color: theme.text }]}>
+                  {energyAmount} energy points → {calculateConvertedPoints(energyAmount)} points
+                </Text>
+                <Text style={[styles.minText, { color: theme.textSecondary, textAlign: 'center', marginTop: 4 }]}>
+                  Available: {walletData.energy_points} energy points
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.cancelButton, { borderColor: theme.border }]}
+                onPress={() => {
+                  setShowConversionModal(false);
+                  setEnergyAmount('');
+                }}
+              >
+                <Text style={[styles.cancelButtonText, { color: theme.textSecondary }]}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.modalButton}
+                onPress={handleEnergyConversion}
+                disabled={convertingEnergy}
+              >
+                <LinearGradient
+                  colors={['#FFD700', '#FFA500']}
+                  style={styles.confirmButton}
+                >
+                  <Text style={styles.confirmButtonText}>
+                    {convertingEnergy ? 'Converting...' : 'Convert'}
+                  </Text>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
@@ -774,5 +949,79 @@ const createStyles = (theme: any) => StyleSheet.create({
     color: '#ffffff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Energy Conversion Styles
+  conversionSection: {
+    marginHorizontal: 20,
+    marginBottom: 20,
+    padding: 20,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  conversionHeader: {
+    marginBottom: 16,
+  },
+  conversionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  conversionSubtitle: {
+    fontSize: 14,
+  },
+  conversionContent: {
+    gap: 16,
+  },
+  conversionRate: {
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    padding: 12,
+    borderRadius: 10,
+    gap: 4,
+  },
+  rateText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  minText: {
+    fontSize: 12,
+  },
+  convertButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  convertGradient: {
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  convertText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Conversion Modal Styles
+  conversionModalContent: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    maxHeight: '70%',
+  },
+  conversionPreview: {
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  previewText: {
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  conversionInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    marginBottom: 16,
   },
 });

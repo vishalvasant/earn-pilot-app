@@ -17,7 +17,8 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.networks11.earnpilot"
+      "bundleIdentifier": "com.networks11.earnpilot",
+      "orientation": "portrait"
     },
     "android": {
       "adaptiveIcon": {
@@ -33,7 +34,8 @@
         "VIBRATE",
         "WAKE_LOCK",
         "POST_NOTIFICATIONS"
-      ]
+      ],
+      "orientation": "portrait"
     },
     "web": {
       "bundler": "metro",
@@ -47,6 +49,12 @@
         {
           "icon": "./assets/images/NewPilot.png",
           "color": "#3B82F6"
+        }
+      ],
+      [
+        "expo-screen-orientation",
+        {
+          "initialOrientation": "PORTRAIT"
         }
       ]
     ],

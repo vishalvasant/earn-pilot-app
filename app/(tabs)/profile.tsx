@@ -78,9 +78,9 @@ function ProfileScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+  }, []); // Empty dependency array is correct here
 
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     try {
       console.log('🔄 Loading profile...');
       const data = await getProfile();
@@ -104,7 +104,7 @@ function ProfileScreen() {
       setAge('');
       setLocation('');
     }
-  };
+  }, []); // No dependencies needed as it uses setters
 
   const handleLogout = async () => {
     try {
@@ -414,7 +414,7 @@ function ProfileScreen() {
         <AnimatedCard delay={1000}>
           <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.border }]}> 
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Account</Text>
-            <View style={[styles.achievementItem, { borderBottomColor: theme.borderLight }]}>
+            <View style={[styles.achievementItem, { borderBottomColor: theme.border + '30' }]}>
               <View style={styles.achievementInfo}>
                 <Icon name="email" size={24} color={theme.primary} />
                 <View style={styles.achievementDetails}>
@@ -425,7 +425,7 @@ function ProfileScreen() {
                 </View>
               </View>
             </View>
-            <View style={[styles.achievementItem, { borderBottomColor: theme.borderLight }]}> 
+            <View style={[styles.achievementItem, { borderBottomColor: theme.border + '30' }]}> 
               <View style={styles.achievementInfo}>
                 <Icon name="location" size={24} color={theme.primary} />
                 <View style={styles.achievementDetails}>
@@ -689,7 +689,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: theme.borderLight,
+    borderBottomColor: theme.border + '30',
   },
   settingsLabel: {
     fontSize: 16,

@@ -177,7 +177,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     
     const lastPlayTime = lastGameTimes[gameType] || 0;
     const now = Date.now();
-    const cooldownMs = (gameConfig.play_cooldown_seconds || 300) * 1000;
+    const cooldownMs = (gameConfig.play_cooldown_seconds || 0) * 1000;
     
     // Check cooldown
     if (now - lastPlayTime < cooldownMs) {
@@ -212,7 +212,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     
     const lastPlayTime = lastGameTimes[gameType] || 0;
     const now = Date.now();
-    const cooldownMs = (gameConfig.play_cooldown_seconds || 300) * 1000;
+    const cooldownMs = (gameConfig.play_cooldown_seconds || 0) * 1000;
     const remaining = cooldownMs - (now - lastPlayTime);
     
     return Math.max(0, remaining);

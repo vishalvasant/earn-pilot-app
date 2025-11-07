@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { 
   SafeAreaView, 
   Text, 
@@ -16,10 +16,12 @@ import { useTheme } from '../../hooks/useTheme';
 import { api } from '../../services/api';
 import { useUserStore } from '../../stores/userStore';
 import { useGameStore } from '../../hooks/useGameStore';
+import { useGameCooldowns } from '../../hooks/useGameCooldowns';
 import ColorMatchGame from '../../components/games/ColorMatchGame';
 import ImageSimilarityGame from '../../components/games/ImageSimilarityGame';
 import MathQuizGame from '../../components/games/MathQuizGame';
 import MemoryPatternGame from '../../components/games/MemoryPatternGame';
+import GameCooldownTimer from '../../components/GameCooldownTimer';
 import Icon from '../../components/Icon';
 import ThemedPopup from '../../components/ThemedPopup';
 
@@ -43,100 +45,55 @@ const getGreeting = () => {
 
 export default function HomeScreen() {
   const theme = useTheme();
-  const styles = createStyles(theme);
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
+  const isInitializingCooldowns = useRef(false);
   const [refreshing, setRefreshing] = useState(false);
   const [activeGame, setActiveGame] = useState<'color-match' | 'image-similarity' | 'math-quiz' | 'memory-pattern' | null>(null);
-  const { stats, gameConfigs, loadStats, loadGameConfigs, canPlayGame, getGameCooldown, getGameConfig, addPoints } = useGameStore();
-  const { setProfile } = useUserStore();
+  // Optimize store subscriptions to prevent unnecessary re-renders
+  const stats = useGameStore(state => state.stats);
+  const gameConfigs = useGameStore(state => state.gameConfigs);
+  const loadStats = useGameStore(state => state.loadStats);
+  const loadGameConfigs = useGameStore(state => state.loadGameConfigs);
+  const getGameConfig = useGameStore(state => state.getGameConfig);
+  const addPoints = useGameStore(state => state.addPoints);
+  const profile = useUserStore(state => state.profile);
+  const setProfile = useUserStore(state => state.setProfile);
   const [dashboard, setDashboard] = useState<any>(null);
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [greeting, setGreeting] = useState(getGreeting());
   const [showCooldownPopup, setShowCooldownPopup] = useState(false);
   const [cooldownMessage, setCooldownMessage] = useState('');
   const [popupTitle, setPopupTitle] = useState('Game Complete');
-  const [gameCooldowns, setGameCooldowns] = useState<Record<string, number>>({});
+  const { checkGameCooldown, setCooldown, getCooldown, removeCooldown } = useGameCooldowns();
 
+  // Single initialization effect - consolidate all initial loading
   useEffect(() => {
-    const run = async () => {
+    const initialize = async () => {
       try {
-        const data = await getDashboardDetails();
-        // Accept either { data: ... } or raw shape
-        setDashboard(data?.data ?? data ?? null);
+        // Load all initial data
+        const [dashboardData] = await Promise.all([
+          getDashboardDetails(),
+          loadStats(),
+          loadGameConfigs()
+        ]);
+        
+        // Set dashboard data
+        setDashboard(dashboardData?.data ?? dashboardData ?? null);
       } catch (e) {
-        console.warn('Failed to load dashboard', e);
+        console.warn('Failed to load initial data', e);
       } finally {
         setLoadingDashboard(false);
       }
     };
-    run();
-    loadStats();
-    loadGameConfigs();
+    
+    initialize();
     
     // Update greeting every minute
     const greetingInterval = setInterval(() => {
       setGreeting(getGreeting());
-    }, 60000); // Update every minute
-    
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-    ]).start();
-    
-    return () => clearInterval(greetingInterval);
-  }, []);
-
-  // Update cooldowns every 30 seconds and when game configs change
-  useEffect(() => {
-    if (gameConfigs.length > 0) {
-      updateAllGameCooldowns();
-      
-      const cooldownInterval = setInterval(() => {
-        // Decrease cooldowns by 30 seconds
-        setGameCooldowns(prev => {
-          const updated = { ...prev };
-          Object.keys(updated).forEach(gameSlug => {
-            updated[gameSlug] = Math.max(0, updated[gameSlug] - 30);
-            if (updated[gameSlug] <= 0) {
-              delete updated[gameSlug];
-            }
-          });
-          return updated;
-        });
-      }, 30000); // Update every 30 seconds
-
-      return () => clearInterval(cooldownInterval);
-    }
-  }, [gameConfigs]);
-
-  // Dynamic data including game points (safe defaults)
-  const dynamicData = useMemo(() => {
-    if (!dashboard) return null;
-    return {
-      totalEarnings: Number(dashboard.total_earned ?? 0),
-      todayEarnings: 0, // We'll get this from energy points activity if needed
-      completedTasks: Number(stats.gamesPlayed ?? 0),
-      pendingTasks: Number(dashboard.pending_tasks ?? 0),
-      weeklyData: Array.isArray(dashboard.weekly_earnings) ? dashboard.weekly_earnings : [],
-      recentActivities:
-        (stats.gamesPlayed ?? 0) > 0
-          ? [{ id: 0, type: 'game', title: 'Mini Games', points: dashboard.energy_points ?? 0, time: 'Today' }]
-          : [],
-    };
-  }, [dashboard, stats]);
-
-  useEffect(() => {
-    // Load game stats
-    loadStats();
+    }, 60000);
     
     // Entrance animation
     Animated.parallel([
@@ -151,14 +108,51 @@ export default function HomeScreen() {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+    
+    return () => clearInterval(greetingInterval);
+  }, []); // Empty dependency array to run only once on mount
 
-  const AnimatedCard = ({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) => {
+  // No complex cooldown intervals needed - individual timers handle countdown
+
+  // Dynamic data including game points (safe defaults) - optimized dependencies
+  const dynamicData = useMemo(() => {
+    if (!dashboard) return null;
+    
+    const gamesPlayed = Number(stats?.gamesPlayed ?? 0);
+    const totalEarned = Number(dashboard.total_earned ?? 0);
+    const energyPoints = Number(dashboard.energy_points ?? 0);
+    const pendingTasks = Number(dashboard.pending_tasks ?? 0);
+    const completedTasks = Number(dashboard.completed_tasks ?? 0) + gamesPlayed; // Include games played
+    
+    // Combine recent activities from API with local game activities
+    const apiActivities = dashboard.recent_activities || [];
+    const gameActivities = gamesPlayed > 0 
+      ? [{ id: 'games_today', type: 'game', title: 'Mini Games', points: energyPoints, time: 'Today' }]
+      : [];
+    
+    return {
+      totalEarnings: totalEarned,
+      completedTasks: completedTasks,
+      pendingTasks: pendingTasks,
+      recentActivities: [...gameActivities, ...apiActivities.slice(0, 4)], // Show max 5 activities
+    };
+  }, [
+    dashboard?.total_earned,
+    dashboard?.energy_points,
+    dashboard?.pending_tasks,
+    dashboard?.completed_tasks,
+    dashboard?.recent_activities,
+    stats?.gamesPlayed
+  ]);
+
+
+
+  const AnimatedCard = useCallback(({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) => {
     const cardFade = useRef(new Animated.Value(0)).current;
     const cardSlide = useRef(new Animated.Value(30)).current;
 
     useEffect(() => {
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         Animated.parallel([
           Animated.timing(cardFade, {
             toValue: 1,
@@ -172,7 +166,9 @@ export default function HomeScreen() {
           }),
         ]).start();
       }, delay);
-    }, []);
+
+      return () => clearTimeout(timer);
+    }, [delay, cardFade, cardSlide]);
 
     return (
       <Animated.View
@@ -184,54 +180,35 @@ export default function HomeScreen() {
         {children}
       </Animated.View>
     );
-  };
+  }, []);
 
-  const WeeklyChart = () => {
-    const weekly = dynamicData?.weeklyData && dynamicData.weeklyData.length > 0
-      ? dynamicData.weeklyData
-      : [10, 20, 15, 30, 25, 40, 35];
-    const maxValue = Math.max(...weekly, 1);
-    return (
-      <View style={styles.chartContainer}>
-        <Text style={[styles.chartTitle, { color: theme.text }]}>Weekly Earnings</Text>
-        <View style={styles.chart}>
-          {weekly.map((value: number, index: number) => {
-            const height = (value / maxValue) * 100;
-            const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-            return (
-              <View key={index} style={styles.chartBar}>
-                <LinearGradient
-                  colors={[theme.primary, theme.primaryLight]}
-                  style={[styles.bar, { height: `${height}%` }]}
-                />
-                <Text style={[styles.chartLabel, { color: theme.textSecondary }]}>
-                  {days[index]}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
-      </View>
-    );
-  };
 
-  const handleRefresh = () => {
+
+  const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
-  };
+    try {
+      // Actually refresh the data instead of just showing loading state
+      const [dashboardData] = await Promise.all([
+        getDashboardDetails(),
+        loadStats(),
+        loadGameConfigs()
+      ]);
+      setDashboard(dashboardData?.data ?? dashboardData ?? null);
+    } catch (error) {
+      console.warn('Failed to refresh data', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadStats, loadGameConfigs]);
 
-  const formatCooldownTime = (milliseconds: number) => {
-    const minutes = Math.floor(milliseconds / 60000);
-    const seconds = Math.floor((milliseconds % 60000) / 1000);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  };
 
-  const handleGameStart = async (gameType: 'color-match' | 'image-similarity' | 'math-quiz' | 'memory-pattern') => {
-    // Check if game is in cooldown
-    const remainingSeconds = gameCooldowns[gameType] || 0;
+
+  const handleGameStart = useCallback(async (gameType: 'color-match' | 'image-similarity' | 'math-quiz' | 'memory-pattern') => {
+    // Check current cooldown status
+    const cooldown = getCooldown(gameType);
     
-    if (remainingSeconds > 0) {
-      const remainingMinutes = Math.ceil(remainingSeconds / 60);
+    if (cooldown && cooldown.remainingSeconds > 0) {
+      const remainingMinutes = Math.ceil(cooldown.remainingSeconds / 60);
       setPopupTitle('⏰ Game in Cooldown');
       setCooldownMessage(`Please wait ${remainingMinutes} more minute${remainingMinutes !== 1 ? 's' : ''} before playing this game again for energy points.`);
       setShowCooldownPopup(true);
@@ -240,62 +217,63 @@ export default function HomeScreen() {
 
     // Game can be played
     setActiveGame(gameType);
-  };
+  }, [getCooldown]);
 
-  const refreshUserProfile = async () => {
+  const refreshUserProfile = useCallback(async () => {
     try {
       const response = await api.get('/profile');
       setProfile(response.data.user);
     } catch (error) {
       console.error('Failed to refresh user profile:', error);
     }
-  };
+  }, [setProfile]);
 
-  const refreshDashboard = async () => {
+  const refreshDashboard = useCallback(async () => {
     try {
       const data = await getDashboardDetails();
       setDashboard(data?.data ?? data ?? null);
     } catch (error) {
       console.error('Failed to refresh dashboard:', error);
     }
-  };
+  }, []);
 
-  const checkGameCooldown = async (gameSlug: string): Promise<{ canPlay: boolean; remainingSeconds: number }> => {
-    try {
-      const gameId = await getGameIdBySlug(gameSlug);
-      if (!gameId) return { canPlay: true, remainingSeconds: 0 };
-
-      const userResponse = await api.get('/profile');
-      const userId = userResponse.data.user.id;
-
-      // Check if game can be played without creating a session
-      const response = await api.post(`/games/${gameId}/can-play`, { user_id: userId });
-      
-      if (response.data.success && response.data.can_play) {
-        return { canPlay: true, remainingSeconds: 0 };
-      } else {
-        const remainingSeconds = response.data.cooldown_seconds_remaining || 0;
-        return { canPlay: false, remainingSeconds };
+  // Initialize cooldowns when games are loaded OR when user profile is available
+  // This ensures cooldowns are checked after login/logout
+  useEffect(() => {
+    const initializeCooldowns = async () => {
+      if (gameConfigs.length > 0 && profile?.id && !isInitializingCooldowns.current) {
+        isInitializingCooldowns.current = true;
+        console.log('Initializing cooldowns for', gameConfigs.length, 'games');
+        try {
+          for (const game of gameConfigs) {
+            try {
+              const remainingSeconds = await checkGameCooldown(game.id, game.slug);
+              if (remainingSeconds > 0) {
+                setCooldown(game.id, game.slug, remainingSeconds);
+              } else {
+                // Ensure no stale cooldown data
+                removeCooldown(game.slug);
+              }
+            } catch (error) {
+              console.warn('Failed to check cooldown for game:', game.slug, error);
+            }
+          }
+        } finally {
+          isInitializingCooldowns.current = false;
+        }
+      } else if (!profile?.id && gameConfigs.length > 0) {
+        // User logged out, clear all cooldowns
+        gameConfigs.forEach(game => {
+          removeCooldown(game.slug);
+        });
       }
-    } catch (error: any) {
-      console.warn('Error checking game cooldown:', error);
-      return { canPlay: true, remainingSeconds: 0 }; // Default to allowing play if check fails
-    }
-  };
+    };
 
-  const updateAllGameCooldowns = async () => {
-    const cooldowns: Record<string, number> = {};
-    for (const game of gameConfigs) {
-      const status = await checkGameCooldown(game.slug);
-      if (!status.canPlay) {
-        cooldowns[game.slug] = status.remainingSeconds;
-      }
-    }
-    setGameCooldowns(cooldowns);
-  };
+    initializeCooldowns();
+  }, [gameConfigs.length, profile?.id, checkGameCooldown, setCooldown, removeCooldown]);
 
   // Map game types to backend slugs and find game ID dynamically
-  const getGameIdBySlug = async (gameType: string): Promise<number | null> => {
+  const getGameIdBySlug = useCallback(async (gameType: string): Promise<number | null> => {
     try {
       const gameConfig = getGameConfig(gameType);
       return gameConfig ? gameConfig.id : null;
@@ -303,7 +281,7 @@ export default function HomeScreen() {
       console.error('Error getting game ID:', error);
       return null;
     }
-  };
+  }, [getGameConfig]);
 
   const handleGameEnd = async (points: number) => {
     if (activeGame) {
@@ -350,13 +328,13 @@ export default function HomeScreen() {
         await refreshUserProfile();
         await refreshDashboard();
         
-        // Update cooldown for this game
+        // Update cooldown for this game by checking the server
         const gameConfig = getGameConfig(activeGame);
         if (gameConfig) {
-          setGameCooldowns(prev => ({
-            ...prev,
-            [activeGame]: gameConfig.play_cooldown_seconds
-          }));
+          const remainingSeconds = await checkGameCooldown(gameConfig.id, activeGame);
+          if (remainingSeconds > 0) {
+            setCooldown(gameConfig.id, activeGame, remainingSeconds);
+          }
         }
         
         console.log('🔄 Profile and dashboard refreshed');
@@ -365,8 +343,15 @@ export default function HomeScreen() {
         if (error.response?.status === 429) {
           // Cooldown error - this is expected behavior
           const errorData = error.response.data;
-          const remainingMinutes = Math.ceil(errorData.cooldown_seconds_remaining / 60);
-          console.log(`⏰ Game in cooldown: ${Math.ceil(errorData.cooldown_seconds_remaining)} seconds remaining`);
+          const remainingSeconds = errorData.cooldown_seconds_remaining || 0;
+          const remainingMinutes = Math.ceil(remainingSeconds / 60);
+          console.log(`⏰ Game in cooldown: ${remainingSeconds} seconds remaining`);
+          
+          // Set the cooldown timer
+          const gameConfig = getGameConfig(activeGame);
+          if (gameConfig && remainingSeconds > 0) {
+            setCooldown(gameConfig.id, activeGame, remainingSeconds);
+          }
           
           // Still update local stats to track the play
           await addPoints(0, activeGame);
@@ -450,8 +435,8 @@ export default function HomeScreen() {
               <Text style={styles.welcomeText}>{greeting}</Text>
               <Text style={styles.nameText}>Ready to earn today?</Text>
               
-              <View style={styles.todayEarnings}>
-                <Text style={styles.earningsLabel}>Today's Earnings</Text>
+              <View style={styles.totalEarnings}>
+                <Text style={styles.earningsLabel}>Total Earnings</Text>
                 <View style={styles.earningsWithIcon}>
                   <Icon name="coin" size={20} />
                   <Text style={styles.earningsValue}>{dynamicData?.totalEarnings ?? 0}</Text>
@@ -532,12 +517,7 @@ export default function HomeScreen() {
           </AnimatedCard>
         </View>
 
-        {/* Weekly Chart */}
-        <AnimatedCard delay={600}>
-          <View style={[styles.chartSection, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            <WeeklyChart />
-          </View>
-        </AnimatedCard>
+
 
         {/* Recent Activities */}
         <AnimatedCard delay={800}>
@@ -546,18 +526,25 @@ export default function HomeScreen() {
             {dynamicData?.recentActivities?.length ? (
               dynamicData.recentActivities.map((activity: any) => (
                 <TouchableOpacity key={activity.id} style={styles.activityItem} activeOpacity={0.7}>
-                  <View style={styles.activityIcon}>
+                  <View style={[styles.activityIcon, { backgroundColor: theme.primaryLight + '20' }]}>
                     <Text style={styles.activityIconText}>
-                      {activity.type === 'task_completed' ? '✅' :
-                       activity.type === 'bonus' ? '🎁' :
-                       activity.type === 'game' ? '🎮' : '👥'}
+                      {activity.type === 'credit' ? '💰' :
+                       activity.type === 'withdrawal' ? '📤' :
+                       activity.type === 'game' ? '🎮' : 
+                       activity.category === 'task_completed' ? '✅' : '👥'}
                     </Text>
                   </View>
                   <View style={styles.activityContent}>
-                    <Text style={[styles.activityTitle, { color: theme.text }]}>{activity.title}</Text>
-                    <Text style={[styles.activityTime, { color: theme.textSecondary }]}>{activity.time}</Text>
+                    <Text style={[styles.activityTitle, { color: theme.text }]}>
+                      {activity.title || activity.description}
+                    </Text>
+                    <Text style={[styles.activityTime, { color: theme.textSecondary }]}>
+                      {activity.time || activity.date}
+                    </Text>
                   </View>
-                  <Text style={[styles.activityPoints, { color: theme.primary }]}>+{activity.points}</Text>
+                  <Text style={[styles.activityPoints, { color: activity.amount >= 0 ? theme.primary : theme.error || '#FF6B6B' }]}>
+                    {activity.amount >= 0 ? '+' : ''}{activity.points || Math.abs(activity.amount)}
+                  </Text>
                 </TouchableOpacity>
               ))
             ) : (
@@ -580,9 +567,8 @@ export default function HomeScreen() {
             
             <View style={styles.gamesGrid}>
               {gameConfigs.filter(game => game.is_active !== false).map((gameConfig) => {
-                const remainingSeconds = gameCooldowns[gameConfig.slug] || 0;
-                const isInCooldown = remainingSeconds > 0;
-                const remainingMinutes = Math.ceil(remainingSeconds / 60);
+                const cooldown = getCooldown(gameConfig.slug);
+                const isInCooldown = Boolean(cooldown && cooldown.remainingSeconds > 0);
                 
                 return (
                   <TouchableOpacity 
@@ -592,7 +578,7 @@ export default function HomeScreen() {
                       { 
                         backgroundColor: theme.background,
                         borderColor: theme.border,
-                        opacity: isInCooldown ? 0.6 : 1
+                        opacity: isInCooldown ? 0.7 : 1
                       }
                     ]}
                     onPress={() => handleGameStart(gameConfig.slug as any)}
@@ -611,10 +597,14 @@ export default function HomeScreen() {
                     <Text style={[styles.gameDescription, { color: theme.textSecondary }]}>
                       {gameConfig.description}
                     </Text>
-                    {isInCooldown ? (
-                      <Text style={[styles.cooldownText, { color: theme.textSecondary }]}>
-                        ⏱️ {remainingMinutes}m remaining
-                      </Text>
+                    {isInCooldown && cooldown ? (
+                      <GameCooldownTimer
+                        gameId={gameConfig.id}
+                        gameSlug={gameConfig.slug}
+                        cooldownSeconds={cooldown.remainingSeconds}
+                        onCooldownComplete={() => removeCooldown(gameConfig.slug)}
+                        textColor={theme.textSecondary}
+                      />
                     ) : (
                       <View style={[styles.playButton, { backgroundColor: theme.primary }]}>
                         <Text style={styles.playButtonText}>Play Now</Text>
@@ -630,7 +620,7 @@ export default function HomeScreen() {
 
             <View style={styles.dailyLimitInfo}>
               <Text style={[styles.dailyLimitText, { color: theme.textSecondary }]}>
-                Energy Points: ⚡{dashboard?.energy_points ?? 0} • Games Played: {stats.gamesPlayed}
+                Energy Points: ⚡{dashboard?.energy_points ?? 0} • Balance: ₹{dashboard?.balance ?? 0} • Games Played: {stats.gamesPlayed}
               </Text>
             </View>
           </View>
@@ -745,7 +735,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.9)',
     marginBottom: 16,
   },
-  todayEarnings: {
+  totalEarnings: {
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.15)',
     paddingHorizontal: 20,
@@ -832,40 +822,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
   },
-  chartSection: {
-    marginHorizontal: 20,
-    marginBottom: 20,
-    padding: 20,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  chartContainer: {
-    flex: 1,
-  },
-  chartTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 20,
-  },
-  chart: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    height: 120,
-    justifyContent: 'space-between',
-  },
-  chartBar: {
-    flex: 1,
-    alignItems: 'center',
-    marginHorizontal: 2,
-  },
-  bar: {
-    width: '80%',
-    borderRadius: 4,
-    marginBottom: 8,
-  },
-  chartLabel: {
-    fontSize: 12,
-  },
+
   activitiesSection: {
     marginHorizontal: 20,
     marginBottom: 20,
@@ -883,13 +840,12 @@ const createStyles = (theme: any) => StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: theme.borderLight,
+    borderBottomColor: 'rgba(102, 126, 234, 0.2)',
   },
   activityIcon: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: theme.primaryLight + '20',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,

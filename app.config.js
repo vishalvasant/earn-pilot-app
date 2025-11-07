@@ -39,7 +39,7 @@ export default {
       projectId: "156da554-3870-41b3-9a68-2191a71f936d"
     },
     // For local development (Commented):
-    // API_BASE_URL: "http://192.168.31.57:8000", // Real device
+    // API_BASE_URL: "http://192.168.31.242:8000", // Real device
     // API_BASE_URL: "http://127.0.0.1:8000", // Emulator
   },
 };
