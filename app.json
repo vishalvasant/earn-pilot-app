@@ -27,6 +27,8 @@
       },
       "package": "com.networks11.earnpilot",
       "versionCode": 1,
+      "compileSdkVersion": 35,
+      "targetSdkVersion": 35,
       "permissions": [
         "INTERNET",
         "ACCESS_NETWORK_STATE",
@@ -68,7 +70,7 @@
       "eas": {
         "projectId": "156da554-3870-41b3-9a68-2191a71f936d"
       },
-      "API_BASE_URL": "http://127.0.0.1:8000"
+      "API_BASE_URL": "https://networks11.com"
     }
   }
 }
