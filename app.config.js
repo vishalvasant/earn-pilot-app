@@ -18,6 +18,9 @@ export default {
     compileSdkVersion: 35,
     targetSdkVersion: 35,
     buildToolsVersion: "35.0.0",
+    config: {
+      "googleMobileAdsAppId": "ca-app-pub-3940256099942544~3347511713"
+    },
     adaptiveIcon: {
       foregroundImage: './assets/images/NewPilot.png',
       backgroundColor: '#0A1F44'
@@ -80,13 +83,14 @@ export default {
   },
   extra: {
     // Dynamically set API URL based on environment or default to localhost
-    // Production API (Active)
-    API_BASE_URL: "https://networks11.com",
+    // Local API (Active)
+    // API_BASE_URL: "http://192.168.31.242:8000",
     eas: {
       projectId: "156da554-3870-41b3-9a68-2191a71f936d"
     },
-    // For local development (Commented):
+    // For production:
+    API_BASE_URL: "https://networks11.com",
+    // For local development (LAN):
     // API_BASE_URL: "http://192.168.31.242:8000", // Real device
-    // API_BASE_URL: "http://127.0.0.1:8000", // Emulator
   },
 };
