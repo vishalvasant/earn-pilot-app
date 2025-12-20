@@ -54,6 +54,25 @@ export default {
       {
         initialOrientation: 'PORTRAIT'
       }
+    ],
+    [
+      'react-native-google-mobile-ads',
+      {
+        androidAppId: 'ca-app-pub-3940256099942544~3347511713',
+        iosAppId: 'ca-app-pub-3940256099942544~1458002511'
+      }
+    ],
+    [
+      'expo-build-properties',
+      {
+        android: {
+          kotlinVersion: '1.9.24',
+          compileSdkVersion: 34,
+          targetSdkVersion: 34,
+          buildToolsVersion: '34.0.0',
+          ndkVersion: '26.1.10909125'
+        }
+      }
     ]
   ],
   experiments: {
