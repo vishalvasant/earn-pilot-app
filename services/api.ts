@@ -19,10 +19,9 @@ console.log('🔗 API Base URL:', resolvedBaseURL);
 
 export const api = axios.create({ baseURL: `${resolvedBaseURL}/api` });
 
-api.interceptors.request.use((config) => {
+api.interceptors.request.use(async (config) => {
   const token = useAuthStore.getState().token;
   if (token) {
-    config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${token}`;
   }
   console.log('📤 API Request:', config.method?.toUpperCase(), config.url);

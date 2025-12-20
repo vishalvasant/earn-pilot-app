@@ -1,35 +1,33 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { View, StatusBar, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useAuthStore } from '../stores/authStore';
 import SplashScreen from './SplashScreen';
 import { useTheme } from '../hooks/useTheme';
+import { useAuthStore } from '../stores/authStore';
 
 export default function IndexPage() {
   const router = useRouter();
-  const bootstrapped = useAuthStore((s) => s.bootstrapped);
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const bootstrap = useAuthStore((s) => s.bootstrap);
+  const [showSplash, setShowSplash] = useState(true);
   const theme = useTheme();
+  const { bootstrapped, isAuthenticated, bootstrap } = useAuthStore();
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      bootstrap();
-    }, 2500); // 2.5 seconds
-    return () => clearTimeout(timer);
-  }, [bootstrap]);
+    // Bootstrap auth state from AsyncStorage
+    bootstrap().then(() => {
+      const timer = setTimeout(() => {
+        setShowSplash(false);
+        // Route based on authentication
+        if (isAuthenticated) {
+          router.replace('/(tabs)/home');
+        } else {
+          router.replace('/(auth)/login');
+        }
+      }, 2500); // 2.5 seconds
+      return () => clearTimeout(timer);
+    });
+  }, [router, isAuthenticated, bootstrap]);
 
-  useEffect(() => {
-    if (bootstrapped) {
-      if (isAuthenticated) {
-        router.replace('/(tabs)/home');
-      } else {
-        router.replace('/(auth)/login');
-      }
-    }
-  }, [bootstrapped, isAuthenticated, router]);
-
-  if (!bootstrapped) {
+  if (showSplash) {
     return <SplashScreen />;
   }
   return <View style={{ flex: 1, backgroundColor: theme.background }} />;

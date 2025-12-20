@@ -16,8 +16,20 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../hooks/useTheme';
 import { api } from '../../services/api';
+import { useAdMob } from '../../hooks/useAdMob';
 import Icon from '../../components/Icon';
 import ThemedPopup from '../../components/ThemedPopup';
+
+// Safely import BannerAd - may not be available in Expo Go
+let BannerAd: any = null;
+let BannerAdSize: any = null;
+try {
+  const admobModule = require('react-native-google-mobile-ads');
+  BannerAd = admobModule.BannerAd;
+  BannerAdSize = admobModule.BannerAdSize;
+} catch (e) {
+  // AdMob not available in Expo Go
+}
 
 const { height: screenHeight } = Dimensions.get('window');
 const HEADER_HEIGHT = screenHeight * 0.30; // 30% of screen height
@@ -28,6 +40,10 @@ export default function WalletScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const balanceAnim = useRef(new Animated.Value(0)).current;
+  
+  // AdMob hooks
+  const { showRewarded, getRemainingRewardedAds, getRewardedAdBonus, shouldShowBanner, getBannerAdId } = useAdMob();
+  const [loadingRewardedAd, setLoadingRewardedAd] = useState(false);
   
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -396,6 +412,43 @@ export default function WalletScreen() {
           </View>
         </AnimatedCard>
 
+        {/* Earn Bonus Button - Rewarded Ad */}
+        <AnimatedCard delay={450}>
+          <View style={styles.withdrawSection}>
+            <TouchableOpacity 
+              style={styles.withdrawButton}
+              onPress={async () => {
+                if (getRemainingRewardedAds() <= 0) {
+                  showPopup('Daily Limit Reached', 'You have watched all available ads for today. Come back tomorrow!');
+                  return;
+                }
+                setLoadingRewardedAd(true);
+                const success = await showRewarded(() => {
+                  showPopup('🎉 Bonus Earned!', `You earned ${getRewardedAdBonus()} bonus points! Keep earning more by watching ads.`);
+                  loadWalletData(); // Refresh wallet data
+                });
+                setLoadingRewardedAd(false);
+                if (!success && getRemainingRewardedAds() > 0) {
+                  showPopup('Ad Not Available', 'Please try again in a moment.');
+                }
+              }}
+              activeOpacity={0.8}
+              disabled={loadingRewardedAd || getRemainingRewardedAds() <= 0}
+            >
+              <LinearGradient
+                colors={getRemainingRewardedAds() > 0 ? ['#fa709a', '#fee140'] : [theme.borderLight, theme.border] as [string, string, ...string[]]}
+                style={styles.withdrawGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Text style={[styles.withdrawText, getRemainingRewardedAds() <= 0 && { color: theme.textSecondary }]}>
+                  {loadingRewardedAd ? '⏳ Loading Ad...' : `🎁 Watch Ad & Earn +${getRewardedAdBonus()} Points (${getRemainingRewardedAds()} left)`}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </AnimatedCard>
+
         {/* Withdrawal Methods */}
         <AnimatedCard delay={600}>
           <View style={[styles.methodsSection, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -642,6 +695,16 @@ export default function WalletScreen() {
           message={popup.message}
           onConfirm={popup.onConfirm}
         />
+      )}
+      
+      {/* Banner Ad */}
+      {shouldShowBanner && (
+        <View style={{ alignItems: 'center', paddingVertical: 8, backgroundColor: theme.background }}>
+          <BannerAd
+            unitId={getBannerAdId()}
+            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+          />
+        </View>
       )}
     </SafeAreaView>
   );

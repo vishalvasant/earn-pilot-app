@@ -16,8 +16,20 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { api } from '../../services/api';
 import { useTheme } from '../../hooks/useTheme';
+import { useAdMob } from '../../hooks/useAdMob';
 import Icon from '../../components/Icon';
 import ThemedPopup from '../../components/ThemedPopup';
+
+// Safely import BannerAd - may not be available in Expo Go
+let BannerAd: any = null;
+let BannerAdSize: any = null;
+try {
+  const admobModule = require('react-native-google-mobile-ads');
+  BannerAd = admobModule.BannerAd;
+  BannerAdSize = admobModule.BannerAdSize;
+} catch (e) {
+  // AdMob not available in Expo Go
+}
 
 const { width, height: screenHeight } = Dimensions.get('window');
 const HEADER_HEIGHT = screenHeight * 0.30; // 30% of screen height
@@ -239,6 +251,7 @@ const TaskCard = ({ task, index, theme, onComplete, router }: {
   const slideAnim = useRef(new Animated.Value(50)).current;
   const scaleAnim = useRef(new Animated.Value(0.95)).current;
   const styles = createStyles(theme);
+  const { showInterstitial } = useAdMob();
 
   useEffect(() => {
     setTimeout(() => {
@@ -262,7 +275,7 @@ const TaskCard = ({ task, index, theme, onComplete, router }: {
     }, index * 100);
   }, []);
 
-  const handlePress = () => {
+  const handlePress = async () => {
     Animated.sequence([
       Animated.timing(scaleAnim, {
         toValue: 0.97,
@@ -274,7 +287,10 @@ const TaskCard = ({ task, index, theme, onComplete, router }: {
         duration: 100,
         useNativeDriver: true,
       }),
-    ]).start(() => {
+    ]).start(async () => {
+      try {
+        await showInterstitial();
+      } catch {}
       // Navigate to task detail page after animation completes
       router.push(`/task-detail?taskId=${task.id}`);
     });
@@ -434,6 +450,10 @@ export default function TasksScreen() {
   const theme = useTheme();
   const router = useRouter();
   const styles = createStyles(theme);
+  
+  // AdMob hooks
+  const { shouldShowBanner, getBannerAdId, showInterstitial } = useAdMob();
+  
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -557,9 +577,13 @@ export default function TasksScreen() {
       `Complete "${task.title}" for ${task.reward_points} points?${task.energy_cost > 0 ? `\n\n⚡ Will use ${task.energy_cost} energy` : ''}`,
       async () => {
         try {
+          // Show an interstitial before starting/completing
+          try { await showInterstitial(); } catch {}
           // Step 1: Start the task (deducts energy if needed). Idempotent.
           await api.post(`/tasks/${task.id}/start`);
 
+          // Optional: another interstitial before final completion
+          try { await showInterstitial(); } catch {}
           // Step 2: Complete the task
           const res = await api.post(`/tasks/${task.id}/complete`);
           showPopup('Success! 🎉', res.data.message || 'Task completed successfully!');
@@ -708,6 +732,16 @@ export default function TasksScreen() {
         onCancel={popupConfig.onCancel}
         onClose={() => setPopupVisible(false)}
       />
+      
+      {/* Banner Ad */}
+      {shouldShowBanner && (
+        <View style={{ alignItems: 'center', paddingVertical: 8, backgroundColor: theme.background }}>
+          <BannerAd
+            unitId={getBannerAdId()}
+            size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
+          />
+        </View>
+      )}
     </SafeAreaView>
   );
 }

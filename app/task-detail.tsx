@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { WebView } from 'react-native-webview';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../hooks/useTheme';
+import { useAdMob } from '../hooks/useAdMob';
 import Icon from '../components/Icon';
 import { api } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
@@ -50,10 +51,12 @@ export default function TaskDetailScreen() {
   const { taskId } = useLocalSearchParams();
   const router = useRouter();
   const theme = useTheme();
+  const { showInterstitial } = useAdMob();
   
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeSubtask, setActiveSubtask] = useState<Subtask | null>(null);
+  const [showingAd, setShowingAd] = useState(false);
   const [webViewKey, setWebViewKey] = useState(0);
   const [completingSubtask, setCompletingSubtask] = useState<number | null>(null);
   const [popupVisible, setPopupVisible] = useState(false);
@@ -73,6 +76,10 @@ export default function TaskDetailScreen() {
 
   useEffect(() => {
     const backAction = () => {
+      // Block back navigation while ad is showing
+      if (showingAd) {
+        return true;
+      }
       if (activeSubtask) {
         setActiveSubtask(null);
         return true;
@@ -82,7 +89,7 @@ export default function TaskDetailScreen() {
 
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
     return () => backHandler.remove();
-  }, [activeSubtask]);
+  }, [activeSubtask, showingAd]);
 
   const fetchTaskDetail = async () => {
     try {
@@ -107,6 +114,8 @@ export default function TaskDetailScreen() {
     }
 
     try {
+      // Show an interstitial before completing a subtask
+      try { await showInterstitial(); } catch {}
       setCompletingSubtask(subtask.id);
       const response = await api.post(`/tasks/subtasks/${subtask.id}/complete`);
       
@@ -140,11 +149,21 @@ export default function TaskDetailScreen() {
     }
   };
 
-  const openSubtask = (subtask: Subtask) => {
+  const openSubtask = async (subtask: Subtask) => {
     if (subtask.status === 'completed') {
       showPopup('Already Completed', 'You have already completed this subtask.');
       return;
     }
+    
+    // Show interstitial ad before opening subtask
+    setShowingAd(true);
+    try {
+      await showInterstitial();
+    } catch (error) {
+      console.log('No ad to show or ad failed:', error);
+    }
+    setShowingAd(false);
+    
     setActiveSubtask(subtask);
     setWebViewKey(prev => prev + 1);
   };
@@ -155,12 +174,14 @@ export default function TaskDetailScreen() {
 
   const styles = createStyles(theme);
 
-  if (loading) {
+  if (loading || showingAd) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={[styles.loadingText, { color: theme.text }]}>Loading task details...</Text>
+          <Text style={[styles.loadingText, { color: theme.text }]}>
+            {showingAd ? 'Loading ad...' : 'Loading task details...'}
+          </Text>
         </View>
       </SafeAreaView>
     );
