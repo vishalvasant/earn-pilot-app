@@ -3,7 +3,7 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { useAuthStore } from '../stores/authStore';
 // Resolve base URL from config with sensible local defaults
-const rawBaseURL = (Constants.expoConfig?.extra as any)?.API_BASE_URL || 'http://127.0.0.1:8000';
+const rawBaseURL = (Constants.expoConfig?.extra as any)?.API_BASE_URL || 'https://networks11.com';
 let resolvedBaseURL = rawBaseURL;
 
 // On Android emulator, localhost of the host machine is 10.0.2.2

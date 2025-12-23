@@ -107,21 +107,29 @@ export default function WalletScreen() {
   const loadWalletData = async () => {
     try {
       setLoading(true);
-      const [balanceRes, activityRes, methodsRes, conversionRes] = await Promise.all([
+      const [balanceRes, activityRes, methodsRes] = await Promise.all([
         api.get('/wallet/balance'),
         api.get('/wallet/activity'),
         api.get('/wallet/withdrawal-methods'),
-        api.get('/wallet/conversion-rate'),
       ]);
+
+      let conversionRateData = { rate: 10, minRequired: 50, enabled: true };
+      try {
+        const conversionRes = await api.get('/wallet/conversion-rate');
+        conversionRateData = {
+          rate: conversionRes.data?.data?.conversion_rate || 10,
+          minRequired: conversionRes.data?.data?.min_energy_required || 50,
+          enabled: conversionRes.data?.data?.conversion_enabled !== false
+        };
+      } catch (err: any) {
+        // If 404 or any error, use default
+        console.warn('Conversion rate API failed, using default value 10');
+      }
 
       setWalletData(balanceRes.data?.data || { balance: 0, energy_points: 0, pending_amount: 0, total_withdrawn: 0 });
       setTransactions(activityRes.data?.data || []);
       setWithdrawalMethods(methodsRes.data?.data || []);
-      setConversionRate({
-        rate: conversionRes.data?.data?.conversion_rate || 10,
-        minRequired: conversionRes.data?.data?.min_energy_required || 50,
-        enabled: conversionRes.data?.data?.conversion_enabled !== false
-      });
+      setConversionRate(conversionRateData);
     } catch (error) {
       console.error('Failed to load wallet data:', error);
       showPopup('Error', 'Failed to load wallet data. Please try again.');

@@ -15,12 +15,9 @@ export default {
   android: {
     package: 'com.networks11.earnpilot',
     versionCode: 4,
-    compileSdkVersion: 35,
-    targetSdkVersion: 35,
-    buildToolsVersion: "35.0.0",
-    config: {
-      "googleMobileAdsAppId": "ca-app-pub-3940256099942544~3347511713"
-    },
+    compileSdkVersion: 34,
+    targetSdkVersion: 34,
+    buildToolsVersion: "34.0.0",
     adaptiveIcon: {
       foregroundImage: './assets/images/NewPilot.png',
       backgroundColor: '#0A1F44'
@@ -46,13 +43,6 @@ export default {
   plugins: [
     'expo-router',
     [
-      'expo-notifications',
-      {
-        icon: './assets/images/NewPilot.png',
-        color: '#3B82F6',
-      }
-    ],
-    [
       'expo-screen-orientation',
       {
         initialOrientation: 'PORTRAIT'
@@ -69,10 +59,10 @@ export default {
       'expo-build-properties',
       {
         android: {
-          kotlinVersion: '1.9.24',
-          compileSdkVersion: 34,
-          targetSdkVersion: 34,
-          buildToolsVersion: '34.0.0',
+          kotlinVersion: '1.9.25',
+          compileSdkVersion: 35,
+          targetSdkVersion: 36,
+          buildToolsVersion: '35.0.0',
           ndkVersion: '26.1.10909125'
         }
       }
