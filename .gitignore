@@ -32,6 +32,10 @@ local.properties
 *.hprof
 .cxx/
 
+#IOS
+
+ios/
+
 # Node.js
 #
 node_modules/
