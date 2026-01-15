@@ -1,115 +1,59 @@
 import { Tabs } from 'expo-router';
-import React, { useEffect, useRef } from 'react';
-import { View, Animated, StyleSheet, Dimensions, TouchableOpacity, Text } from 'react-native';
-import { useTheme } from '../../hooks/useTheme';
-import Icon from '../../components/Icon';
-import { IconName } from '../../constants/icons';
+import React from 'react';
+import { View, StyleSheet, TouchableOpacity, Text, Dimensions } from 'react-native';
+import { themeColors, typography, spacing, borderRadius } from '../../hooks/useThemeColors';
 
 const { width } = Dimensions.get('window');
-const TAB_COUNT = 4;
-const TAB_WIDTH = width / TAB_COUNT;
 
 export default function TabsLayout() {
-  const theme = useTheme();
+  const renderCustomTabBar = (props: any) => {
+    const { state, navigation } = props;
 
-  const CustomTabBar = ({ state, descriptors, navigation }: any) => {
-    const indicatorPosition = useRef(new Animated.Value(0)).current;
-
-    const animateIndicator = (index: number) => {
-      Animated.spring(indicatorPosition, {
-        toValue: index * TAB_WIDTH,
-        useNativeDriver: true,
-        tension: 100,
-        friction: 12,
-      }).start();
-    };
-
-    useEffect(() => {
-      animateIndicator(state.index);
-    }, [state.index]);
-
-    const iconMap: { [key: string]: IconName } = {
-      home: 'home',
-      tasks: 'tasks',
-      wallet: 'earnings',
-      profile: 'profile',
-    };
-
-    const labelMap: { [key: string]: string } = {
-      home: 'Home',
-      tasks: 'Tasks',
-      wallet: 'Wallet',
-      profile: 'Profile',
-    };
+    const tabs = [
+      { name: 'home', icon: '🏠', label: 'HOME' },
+      { name: 'tasks', icon: '⚡', label: 'TASKS' },
+      { name: 'wallet', icon: '💰', label: 'WALLET' },
+      { name: 'profile', icon: '👤', label: 'PROFILE' },
+    ];
 
     return (
-      <View style={[styles.tabBarContainer, { backgroundColor: theme.card }]}>
-        {/* Clean Underline Indicator - Stripe Style */}
-        <Animated.View
-          style={[
-            styles.underlineIndicator,
-            {
-              backgroundColor: theme.primary,
-              transform: [{ translateX: indicatorPosition }],
-            },
-          ]}
-        />
+      <View style={styles.tabBarContainer}>
+        {tabs.map((tab, index) => {
+          const isFocused = state.index === index;
 
-        {/* Tab Buttons */}
-        <View style={styles.tabRow}>
-          {state.routes.map((route: any, index: number) => {
-            const isFocused = state.index === index;
-            const iconName = iconMap[route.name] || 'home';
-            const label = labelMap[route.name] || route.name;
+          const onPress = () => {
+            const event = navigation.emit({
+              type: 'tabPress',
+              target: state.routes[index].key,
+              canPreventDefault: true,
+            });
 
-            const onPress = () => {
-              const event = navigation.emit({
-                type: 'tabPress',
-                target: route.key,
-                canPreventDefault: true,
-              });
+            if (!isFocused && !event.defaultPrevented) {
+              navigation.navigate(state.routes[index].name);
+            }
+          };
 
-              if (!isFocused && !event.defaultPrevented) {
-                navigation.navigate(route.name);
-              }
-            };
-
-            return (
-              <TouchableOpacity
-                key={route.key}
-                style={styles.tabButton}
-                onPress={onPress}
-                activeOpacity={0.7}
-              >
-                <View style={styles.iconWrapper}>
-                  <Icon
-                    name={iconName}
-                    size={24}
-                    color={isFocused ? theme.primary : theme.textSecondary}
-                  />
-                </View>
-                <Text
-                  style={[
-                    styles.label,
-                    {
-                      color: isFocused ? theme.text : theme.textSecondary,
-                      fontWeight: isFocused ? '600' : '500',
-                    },
-                  ]}
-                >
-                  {label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+          return (
+            <TouchableOpacity
+              key={tab.name}
+              style={[styles.tabItem, isFocused && styles.tabItemActive]}
+              onPress={onPress}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.tabIcon}>{tab.icon}</Text>
+              <Text style={[styles.tabLabel, isFocused && styles.tabLabelActive]}>
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
     );
   };
 
   return (
     <Tabs
-      tabBar={(props) => <CustomTabBar {...props} />}
+      tabBar={renderCustomTabBar}
       screenOptions={{
         headerShown: false,
       }}
@@ -124,44 +68,45 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   tabBarContainer: {
-    position: 'relative',
-    flexDirection: 'column',
-    height: 70,
-    paddingBottom: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.05)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 10,
-  },
-  underlineIndicator: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    width: TAB_WIDTH,
-    height: 3,
-    borderRadius: 2,
-  },
-  tabRow: {
-    flex: 1,
+    bottom: spacing.lg,
+    left: spacing.lg,
+    right: spacing.lg,
+    height: 65,
+    backgroundColor: 'rgba(17, 23, 33, 0.95)',
+    borderRadius: borderRadius.xl,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0, 209, 255, 0.15)',
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-around',
-    paddingTop: 4,
+    alignItems: 'center',
+    shadowColor: themeColors.primaryBlue,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  tabButton: {
+  tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
+    opacity: 0.4,
+    paddingVertical: spacing.md,
   },
-  iconWrapper: {
-    marginBottom: 4,
+  tabItemActive: {
+    opacity: 1,
   },
-  label: {
-    fontSize: 12,
-    letterSpacing: 0.2,
+  tabIcon: {
+    fontSize: 20,
+    marginBottom: spacing.xs,
+  },
+  tabLabel: {
+    fontSize: typography.xs,
+    fontWeight: '700',
+    color: themeColors.textMain,
+    textTransform: 'uppercase',
+  },
+  tabLabelActive: {
+    color: themeColors.primaryBlue,
   },
 });

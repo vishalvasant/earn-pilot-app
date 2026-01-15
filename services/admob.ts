@@ -53,6 +53,7 @@ export interface AdMobConfig {
   max_rewarded_ads_per_day: number;
   // Platform specific ad unit IDs
   banner_ad_id?: string;
+  banner_ad_tag?: string; // Google Ad Manager tag (e.g., /23329430372/banne)
   interstitial_ad_id?: string;
   rewarded_ad_id?: string;
   native_ad_id?: string;
@@ -131,6 +132,7 @@ class AdMobService {
       // Backend returns { success: true, config: {...} }
       this.config = response.data?.config || null;
       console.log('✅ AdMob config fetched from backend:', this.config);
+      console.log('📍 Banner Ad Tag:', this.config?.banner_ad_tag || 'Not set');
     } catch (error) {
       console.error('❌ Failed to fetch AdMob config, using fallback defaults:', error);
       // Use default config with test IDs as fallback
@@ -147,6 +149,7 @@ class AdMobService {
         max_rewarded_ads_per_day: 5,
         // Fallback to test IDs
         banner_ad_id: GOOGLE_TEST_IDS.BANNER,
+        banner_ad_tag: '/23329430372/banne', // Your Ad Manager tag as fallback
         interstitial_ad_id: GOOGLE_TEST_IDS.INTERSTITIAL,
         rewarded_ad_id: GOOGLE_TEST_IDS.REWARDED,
         native_ad_id: GOOGLE_TEST_IDS.NATIVE,
@@ -165,6 +168,13 @@ class AdMobService {
 
   // Banner Ad Methods
   getBannerAdId(): string {
+    // Force test banner for testing
+    console.log('🧪 Using Google test banner ID for testing');
+    return GOOGLE_TEST_IDS.BANNER;
+    
+    /* Original logic - commented for testing
+    // Priority: Ad Manager tag > Config ID > Test ID
+    const adTag = this.config?.banner_ad_tag;
     const fromConfig = this.config?.banner_ad_id;
     const test = this.config?.test_mode || FORCE_TEST_MODE;
 
@@ -173,12 +183,20 @@ class AdMobService {
       return GOOGLE_TEST_IDS.BANNER;
     }
 
+    // Use Ad Manager tag if available
+    if (adTag) {
+      console.log('🎯 Using Ad Manager banner tag:', adTag);
+      return adTag;
+    }
+
     if (test || !fromConfig) {
       console.log('🧪 Test mode or missing ID - using Google test banner ID');
       return GOOGLE_TEST_IDS.BANNER;
     }
 
+    console.log('📺 Using AdMob banner ID:', fromConfig);
     return fromConfig;
+    */
   }
 
   shouldShowBannerAd(): boolean {

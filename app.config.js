@@ -25,8 +25,7 @@ export default {
     permissions: [
       'RECEIVE_BOOT_COMPLETED',
       'VIBRATE',
-      'WAKE_LOCK',
-      'POST_NOTIFICATIONS'
+      'WAKE_LOCK'
     ]
   },
   ios: {
@@ -81,6 +80,6 @@ export default {
     // For production:
     API_BASE_URL: "https://networks11.com",
     // For local development (LAN):
-    // API_BASE_URL: "http://192.168.31.242:8000", // Real device
+    // API_BASE_URL: "http://192.168.31.25:8000", // Real device
   },
 };

@@ -3,7 +3,6 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { 
   SafeAreaView, 
   Text, 
-  TextInput, 
   TouchableOpacity, 
   View, 
   ScrollView,
@@ -11,490 +10,164 @@ import {
   StatusBar,
   Animated,
   Modal,
-  Switch,
   Dimensions,
-  KeyboardAvoidingView,
-  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { getProfile, updateProfile } from '../../services/api';
+import { getProfile } from '../../services/api';
 import { useTheme } from '../../hooks/useTheme';
 import { useAuthStore } from '../../stores/authStore';
 import { useUserStore } from '../../stores/userStore';
-import Icon from '../../components/Icon';
-import OptimizedTextInput from '../../components/OptimizedTextInput';
-import IsolatedTextInput from '../../components/IsolatedTextInput';
-import ProfileEditForm from '../../components/ProfileEditForm';
 import ThemedPopup from '../../components/ThemedPopup';
+import { useAdMob } from '../../hooks/useAdMob';
 
-const { height: screenHeight } = Dimensions.get('window');
-const HEADER_HEIGHT = screenHeight * 0.30;
+// Safely import BannerAd
+let BannerAd: any = null;
+let BannerAdSize: any = null;
+try {
+  const admobModule = require('react-native-google-mobile-ads');
+  BannerAd = admobModule.BannerAd;
+  BannerAdSize = admobModule.BannerAdSize;
+} catch (e) {
+  console.log('AdMob not available');
+}
 
 function ProfileScreen() {
   const theme = useTheme();
   const router = useRouter();
+  const { shouldShowBanner, getBannerAdId } = useAdMob();
   const logout = useAuthStore((s) => s.logout);
   const userStore = useUserStore();
-  
+
   const [user, setUser] = useState<any | null>(null);
   const [name, setName] = useState('');
-  const [age, setAge] = useState('');
-  const [location, setLocation] = useState('');
-  const [isEditing, setIsEditing] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [notifications, setNotifications] = useState(true);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [popup, setPopup] = useState<{ visible: boolean; title: string; message: string; onConfirm?: () => void } | null>(null);
-  
-  // Create styles once and reuse
+  const [supportExpanded, setSupportExpanded] = useState(false);
+
   const styles = useMemo(() => createStyles(theme), [theme]);
-  
-  // Create stable style objects
-  const inputStyle = useMemo(() => [
-    styles.fieldInput, 
-    { 
-      borderColor: theme.border, 
-      color: theme.text, 
-      backgroundColor: theme.background 
-    }
-  ], [styles.fieldInput, theme.border, theme.text, theme.background]);
-  
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
 
-  useEffect(() => {
-    loadProfile();
-    // Entrance animation
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []); // Empty dependency array is correct here
-
   const loadProfile = useCallback(async () => {
     try {
-      console.log('🔄 Loading profile...');
       const data = await getProfile();
-      console.log('📄 Profile data received:', data);
-      
-      // Accept flexible shapes: { user: {...} } | { data: { user } } | direct user
       const u = (data && (data.user || data.data?.user || data)) || {};
-      console.log('👤 Processed user data:', u);
-      
       setUser(u);
-      setName((u.name as string) || '');
-      setAge(u.age != null ? String(u.age) : '');
-      setLocation((u.location as string) || '');
-      
-      console.log('✅ Profile loaded successfully');
+      userStore.setProfile(u);
+      setName((u.name as string) || 'User');
     } catch (error) {
-      console.error('❌ Profile loading error:', error);
-      // Leave fields empty on failure (UI shows placeholders)
       setUser(null);
-      setName('');
-      setAge('');
-      setLocation('');
+      setName('User');
     }
-  }, []); // No dependencies needed as it uses setters
+  }, [userStore]);
+
+  useEffect(() => {
+    loadProfile();
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
+    ]).start();
+  }, []);
 
   const handleLogout = async () => {
     try {
       await logout();
       router.replace('/(auth)/login');
     } catch (error) {
-      setPopup({
-        visible: true,
-        title: 'Error',
-        message: 'Failed to logout. Please try again.',
-        onConfirm: () => setPopup(null)
-      });
+      setPopup({ visible: true, title: 'Error', message: 'Failed to logout. Please try again.', onConfirm: () => setPopup(null) });
     }
-  };
-
-  const AnimatedCard = ({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) => {
-    const cardFade = useRef(new Animated.Value(0)).current;
-    const cardSlide = useRef(new Animated.Value(30)).current;
-
-    useEffect(() => {
-      setTimeout(() => {
-        Animated.parallel([
-          Animated.timing(cardFade, {
-            toValue: 1,
-            duration: 600,
-            useNativeDriver: true,
-          }),
-          Animated.timing(cardSlide, {
-            toValue: 0,
-            duration: 600,
-            useNativeDriver: true,
-          }),
-        ]).start();
-      }, delay);
-    }, []);
-
-    return (
-      <Animated.View
-        style={{
-          opacity: cardFade,
-          transform: [{ translateY: cardSlide }],
-        }}
-      >
-        {children}
-      </Animated.View>
-    );
-  };
-
-  const ProgressBar = ({ progress, color }: { progress: number; color: string }) => {
-    const progressAnim = useRef(new Animated.Value(0)).current;
-
-    useEffect(() => {
-      Animated.timing(progressAnim, {
-        toValue: progress,
-        duration: 1500,
-        useNativeDriver: false,
-      }).start();
-    }, [progress]);
-
-    return (
-      <View style={styles.progressContainer}>
-        <Animated.View
-          style={[
-            styles.progressBar,
-            {
-              width: progressAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: ['0%', '100%'],
-              }),
-              backgroundColor: color,
-            },
-          ]}
-        />
-      </View>
-    );
   };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <StatusBar 
-        barStyle={theme.background === '#ffffff' ? 'dark-content' : 'light-content'} 
-        backgroundColor={theme.background}
-      />
-      
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-      >
-        <ScrollView 
-          style={styles.scrollView} 
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingBottom: 20 }}
-        >
-        {/* Header */}
-        <Animated.View 
-          style={[
-            styles.header,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            },
-          ]}
-        >
-          <LinearGradient
-            colors={theme.gradient.primary as [string, string, ...string[]]}
-            style={styles.headerGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <View style={styles.headerContent}>
-              <View style={styles.avatarContainer}>
-                <LinearGradient
-                  colors={theme.gradient.primary as [string, string, ...string[]]}
-                  style={styles.avatar}
-                >
-                  <Text style={styles.avatarText}>
-                    {name.split(' ').map(n => n[0]).join('').toUpperCase()}
-                  </Text>
-                </LinearGradient>
-              </View>
-              
-              <Text style={styles.userName}>{name || 'User'}</Text>
-              <Text style={styles.userLevel}>{user?.status ? String(user.status).toUpperCase() : 'MEMBER'}</Text>
+      <StatusBar barStyle={theme.background === '#ffffff' ? 'dark-content' : 'light-content'} backgroundColor={theme.background} />
 
-              <View style={styles.levelProgress}>
-                <Text style={styles.levelProgressText}>Referral Code: {user?.referral_code || '-'}</Text>
-              </View>
-            </View>
-          </LinearGradient>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: shouldShowBanner ? 100 : 20 }}
+      >
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+          <View style={styles.topHeader}>
+            <Text style={styles.logoText}>MY<Text style={{ color: theme.primary }}>PROFILE</Text></Text>
+          </View>
+          <View style={styles.centerProfile}>
+            <LinearGradient colors={theme.gradient.primary as [string, string, ...string[]]} style={styles.avatarSquare} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+              <Text style={{ fontSize: 35 }}>👤</Text>
+            </LinearGradient>
+            <Text style={[styles.centerName, { color: theme.text }]}>{name || 'User'}</Text>
+            <Text style={[styles.centerPoints, { color: theme.primary }]}>💎 {user?.points_balance ?? 0} Points</Text>
+          </View>
         </Animated.View>
 
-        {/* Stats Cards */}
-        <View style={styles.statsContainer}>
-          <AnimatedCard delay={200}>
-            <View style={styles.statsGrid}>
-              <View style={[styles.statCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                <LinearGradient colors={theme.gradient.primary as [string, string, ...string[]]} style={styles.statIcon}>
-                  <Icon name="coin" size={24} color="#ffffff" />
-                </LinearGradient>
-                <View style={styles.statValueContainer}>
-                  <Text style={[styles.statValue, { color: theme.text, marginLeft: 4 }]}>{user?.total_earned ?? 0}</Text>
-                </View>
-                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Total Earned</Text>
-              </View>
-
-              <View style={[styles.statCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                <LinearGradient colors={theme.gradient.secondary as [string, string, ...string[]]} style={styles.statIcon}>
-                  <Icon name="checkmark" size={24} color="#ffffff" />
-                </LinearGradient>
-                <Text style={[styles.statValue, { color: theme.text }]}>{user?.points_balance ?? 0}</Text>
-                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Points Balance</Text>
-              </View>
-            </View>
-          </AnimatedCard>
-
-          <AnimatedCard delay={400}>
-            <View style={styles.statsGrid}>
-              <View style={[styles.statCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                <LinearGradient colors={theme.gradient.primary as [string, string, ...string[]]} style={styles.statIcon}>
-                  <Icon name="phone" size={24} color="#ffffff" />
-                </LinearGradient>
-                <Text style={[styles.statValue, { color: theme.text }]}>{user?.phone || '-'}</Text>
-                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Phone</Text>
-              </View>
-
-              <View style={[styles.statCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                <LinearGradient colors={theme.gradient.secondary as [string, string, ...string[]]} style={styles.statIcon}>
-                  <Icon name="tag" size={24} color="#ffffff" />
-                </LinearGradient>
-                <Text style={[styles.statValue, { color: theme.text }]}>{user?.referral_code || '-'}</Text>
-                <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Referral Code</Text>
-              </View>
-            </View>
-          </AnimatedCard>
+        <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Wallet</Text>
+        <View style={[styles.listItem, styles.listItemAccent, { borderColor: theme.primary, backgroundColor: 'rgba(0, 209, 255, 0.05)' }]}> 
+          <Text style={[styles.listItemText, { color: theme.text }]}>Withdrawal Hub</Text>
+          <Text style={{ color: theme.primary, fontWeight: '800' }}>REDEEM</Text>
         </View>
-        {/* Theme (static) */}
-        {/* <AnimatedCard delay={800}>
-          <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.border }]}> 
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Appearance</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 12 }}>
-              <LinearGradient
-                colors={theme.gradient.primary as [string, string, ...string[]]}
-                style={{ width: 28, height: 28, borderRadius: 8, marginRight: 12 }}
-              />
-              <View>
-                <Text style={{ color: theme.text, fontSize: 16, fontWeight: '600' }}>Fintech Bold</Text>
-                <Text style={{ color: theme.textSecondary, fontSize: 12 }}>Professional navy & blue theme</Text>
-              </View>
+        <View style={[styles.listItem, { borderColor: theme.border, backgroundColor: theme.card }]}> 
+          <Text style={[styles.listItemText, { color: theme.text }]}>Reward Statement</Text>
+          <Text style={{ color: theme.textSecondary }}>View ❯</Text>
+        </View>
+
+        <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Security & Preferences</Text>
+        <TouchableOpacity style={[styles.listItem, { borderColor: theme.border, backgroundColor: theme.card }]} onPress={() => setPopup({ visible: true, title: 'Change Username', message: 'Editing coming soon.', onConfirm: () => setPopup(null) })}>
+          <Text style={[styles.listItemText, { color: theme.text }]}>Change Username</Text>
+          <Text style={{ color: theme.textSecondary }}>❯</Text>
+        </TouchableOpacity>
+
+        <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Support Center</Text>
+        <TouchableOpacity style={[styles.expandableCard, { borderColor: theme.border, backgroundColor: theme.card }]} onPress={() => setSupportExpanded(!supportExpanded)}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={[styles.listItemText, { color: theme.text }]}>Contact Support</Text>
+            <Text style={{ color: theme.primary }}>{supportExpanded ? '▲' : '▼'}</Text>
+          </View>
+        </TouchableOpacity>
+        {supportExpanded && (
+          <View>
+            <View style={[styles.listItem, { borderColor: '#1e293b', backgroundColor: '#0a0e17' }]}> 
+              <Text style={[styles.listItemText, { color: theme.text }]}>WhatsApp</Text>
+            </View>
+            <View style={[styles.listItem, { borderColor: '#1e293b', backgroundColor: '#0a0e17', marginTop: 5 }]}> 
+              <Text style={[styles.listItemText, { color: theme.text }]}>Telegram</Text>
             </View>
           </View>
-        </AnimatedCard> */}
+        )}
 
-        {/* Profile Details */}
-        <AnimatedCard delay={600}>
-          <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.border }]}> 
-            <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>Profile Details</Text>
-              <TouchableOpacity
-                onPress={() => setIsEditing(!isEditing)}
-                style={[styles.editButton, { borderColor: theme.border }]}
-              >
-                <Text style={[styles.editButtonText, { color: theme.primary }]}>
-                  {isEditing ? 'Cancel' : 'Edit'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.profileFields}>
-              {isEditing ? (
-                <ProfileEditForm
-                  user={user}
-                  theme={theme}
-                  styles={styles}
-                  onSave={async (data) => {
-                    setIsLoading(true);
-                    try {
-                      const response = await updateProfile(data);
-                      setUser(response.user);
-                      setName(response.user.name || '');
-                      setAge(response.user.age ? String(response.user.age) : '');
-                      setLocation(response.user.location || '');
-                      setPopup({
-                        visible: true,
-                        title: 'Success! 🎉',
-                        message: 'Profile updated successfully!',
-                        onConfirm: () => {
-                          setPopup(null);
-                          setIsEditing(false);
-                        }
-                      });
-                    } catch (error: any) {
-                      const errorMessage = error.response?.data?.message || 
-                                          error.response?.data?.errors || 
-                                          error.message || 
-                                          'Failed to update profile';
-                      setPopup({
-                        visible: true,
-                        title: 'Error',
-                        message: typeof errorMessage === 'string' ? errorMessage : JSON.stringify(errorMessage),
-                        onConfirm: () => setPopup(null)
-                      });
-                    } finally {
-                      setIsLoading(false);
-                    }
-                  }}
-                  onCancel={() => setIsEditing(false)}
-                  isLoading={isLoading}
-                  onShowPopup={(title, message) => {
-                    setPopup({
-                      visible: true,
-                      title,
-                      message,
-                      onConfirm: () => setPopup(null)
-                    });
-                  }}
-                />
-              ) : (
-                <>
-                  <View style={styles.field}>
-                    <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Name</Text>
-                    <Text style={[styles.fieldValue, { color: theme.text }]}>{name}</Text>
-                  </View>
-
-                  <View style={styles.field}>
-                    <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Age</Text>
-                    <Text style={[styles.fieldValue, { color: theme.text }]}>{age}</Text>
-                  </View>
-
-                  <View style={styles.field}>
-                    <Text style={[styles.fieldLabel, { color: theme.textSecondary }]}>Location</Text>
-                    <Text style={[styles.fieldValue, { color: theme.text }]}>{location}</Text>
-                  </View>
-                </>
-              )}
-            </View>
+        <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Legal</Text>
+        <View style={[styles.listItem, { borderColor: theme.border, backgroundColor: theme.card }]}> 
+          <Text style={[styles.listItemText, { color: theme.text }]}>Privacy Policy</Text>
+        </View>
+        <TouchableOpacity style={[styles.listItem, { borderColor: '#442', marginTop: 20 }]} onPress={() => setShowLogoutModal(true)}>
+          <Text style={{ color: '#ff4444', fontWeight: 'bold' }}>Terminte Session</Text>
+        </TouchableOpacity>
+        {/* Banner Ad */}
+        {shouldShowBanner && BannerAd && (
+          <View style={{ alignItems: 'center', paddingVertical: 8, backgroundColor: theme.background }}>
+            <BannerAd unitId={getBannerAdId()} size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER} />
           </View>
-        </AnimatedCard>
-        
-        {/* Settings */}
-        <AnimatedCard delay={800}>
-          <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.border }]}> 
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Settings</Text>
-            
-            <View style={styles.settingsItem}>
-              <View style={styles.settingsLabelContainer}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Icon name="notifications" size={20} color={theme.text} />
-                  <Text style={[styles.settingsLabel, { color: theme.text }]}>Notifications</Text>
-                </View>
-                <Text style={[styles.settingsSubLabel, { color: theme.textSecondary }]}>
-                  {notifications ? 'Enabled' : 'Disabled'}
-                </Text>
-              </View>
-              <Switch
-                value={notifications}
-                onValueChange={setNotifications}
-                trackColor={{ false: theme.border, true: theme.primary }}
-                thumbColor={notifications ? '#ffffff' : theme.textSecondary}
-              />
-            </View>
-          </View>
-        </AnimatedCard>
+        )}
 
-        {/* Account Info */}
-        <AnimatedCard delay={1000}>
-          <View style={[styles.section, { backgroundColor: theme.card, borderColor: theme.border }]}> 
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Account</Text>
-            <View style={[styles.achievementItem, { borderBottomColor: theme.border + '30' }]}>
-              <View style={styles.achievementInfo}>
-                <Icon name="email" size={24} color={theme.primary} />
-                <View style={styles.achievementDetails}>
-                  <Text style={[styles.achievementTitle, { color: theme.text }]}>Email</Text>
-                  <Text style={[styles.achievementDescription, { color: theme.textSecondary }]}>
-                    {user?.email || 'Not set'}
-                  </Text>
-                </View>
-              </View>
-            </View>
-            <View style={[styles.achievementItem, { borderBottomColor: theme.border + '30' }]}> 
-              <View style={styles.achievementInfo}>
-                <Icon name="location" size={24} color={theme.primary} />
-                <View style={styles.achievementDetails}>
-                  <Text style={[styles.achievementTitle, { color: theme.text }]}>Location</Text>
-                  <Text style={[styles.achievementDescription, { color: theme.textSecondary }]}>
-                    {location || '-'}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          </View>
-        </AnimatedCard>
+        <View style={{ height: 50 }} />
+      </ScrollView>
 
-        {/* Logout */}
-        <AnimatedCard delay={1200}>
-          <TouchableOpacity 
-            style={[styles.logoutButton, { borderColor: theme.error }]}
-            onPress={() => setShowLogoutModal(true)}
-            activeOpacity={0.8}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              <Icon name="logout" size={20} color={theme.error} />
-              <Text style={[styles.logoutButtonText, { color: theme.error }]}>Logout</Text>
-            </View>
-          </TouchableOpacity>
-        </AnimatedCard>
-        </ScrollView>
-      </KeyboardAvoidingView>
-
-      {/* Themed Popup */}
       {popup?.visible && (
-        <ThemedPopup
-          visible={popup.visible}
-          title={popup.title}
-          message={popup.message}
-          onConfirm={popup.onConfirm}
-        />
+        <ThemedPopup visible={popup.visible} title={popup.title} message={popup.message} onConfirm={popup.onConfirm} />
       )}
 
-      {/* Logout Confirmation Modal */}
-      <Modal
-        visible={showLogoutModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowLogoutModal(false)}
-      >
+
+      <Modal visible={showLogoutModal} transparent animationType="fade" onRequestClose={() => setShowLogoutModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
             <Text style={[styles.modalTitle, { color: theme.text }]}>Confirm Logout</Text>
-            <Text style={[styles.modalMessage, { color: theme.textSecondary }]}>
-              Are you sure you want to logout?
-            </Text>
-            
+            <Text style={[styles.modalMessage, { color: theme.textSecondary }]}>Are you sure you want to logout?</Text>
             <View style={styles.modalButtons}>
-              <TouchableOpacity 
-                style={[styles.modalButton, styles.cancelButton, { borderColor: theme.border }]}
-                onPress={() => setShowLogoutModal(false)}
-              >
+              <TouchableOpacity style={[styles.modalButton, styles.cancelButton, { borderColor: theme.border }]} onPress={() => setShowLogoutModal(false)}>
                 <Text style={[styles.cancelButtonText, { color: theme.textSecondary }]}>Cancel</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.modalButton}
-                onPress={handleLogout}
-              >
-                <LinearGradient
-                  colors={[theme.error, '#ff4757']}
-                  style={styles.confirmButton}
-                >
+              <TouchableOpacity style={styles.modalButton} onPress={handleLogout}>
+                <LinearGradient colors={[theme.error, '#ff4757']} style={styles.confirmButton}>
                   <Text style={styles.confirmButtonText}>Logout</Text>
                 </LinearGradient>
               </TouchableOpacity>
@@ -513,237 +186,77 @@ const createStyles = (theme: any) => StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  header: {
-    marginBottom: 20,
-  },
-  headerGradient: {
+  topHeader: {
     paddingHorizontal: 20,
-    paddingVertical: 16,
-    paddingTop: 50,
-    height: HEADER_HEIGHT,
+    paddingTop: 35,
+    paddingBottom: 15,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  headerContent: {
-    flex: 1,
+  logoText: {
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+    color: theme.text,
+  },
+  centerProfile: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+  },
+  avatarSquare: {
+    width: 85,
+    height: 85,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 10,
+    borderWidth: 4,
+    borderColor: '#1a1f26',
   },
-  avatarContainer: {
-    marginBottom: 12,
+  centerName: {
+    fontSize: 22,
+    fontWeight: '700',
   },
-  avatar: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    alignItems: 'center',
-    justifyContent: 'center',
+  centerPoints: {
+    fontSize: 18,
+    fontWeight: '800',
+    marginTop: 5,
   },
-  avatarText: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  userName: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 4,
-  },
-  userLevel: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.9)',
-    marginBottom: 12,
-  },
-  levelProgress: {
-    alignItems: 'center',
-    width: '100%',
-  },
-  levelProgressText: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.8)',
-    marginBottom: 4,
-  },
-  progressContainer: {
-    width: '80%',
-    height: 6,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: 3,
-    marginBottom: 8,
-  },
-  progressBar: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  levelProgressPercent: {
+  sectionLabel: {
     fontSize: 11,
-    color: 'rgba(255, 255, 255, 0.9)',
-    fontWeight: '600',
-  },
-  statsContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
-  },
-  statsGrid: {
-    flexDirection: 'row',
-    marginBottom: 16,
-  },
-  statCard: {
-    flex: 1,
-    padding: 20,
-    borderRadius: 16,
-    marginHorizontal: 8,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  statIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
+    fontWeight: '800',
+    marginHorizontal: 25,
+    marginTop: 25,
     marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 2,
   },
-  statIconText: {
-    fontSize: 20,
-    color: '#ffffff',
-    fontWeight: 'bold',
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  statValueContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    textAlign: 'center',
-  },
-  section: {
+  listItem: {
     marginHorizontal: 20,
-    marginBottom: 20,
+    marginBottom: 10,
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+    borderRadius: 22,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  listItemAccent: {
+    borderWidth: 1.5,
+  },
+  listItemText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  expandableCard: {
+    marginHorizontal: 20,
+    marginBottom: 15,
     padding: 20,
-    borderRadius: 16,
+    borderRadius: 24,
     borderWidth: 1,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  editButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  editButtonText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  profileFields: {
-    gap: 16,
-  },
-  field: {
-    gap: 8,
-  },
-  fieldLabel: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  fieldValue: {
-    fontSize: 16,
-    fontWeight: '400',
-  },
-  fieldInput: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    fontSize: 16,
-  },
-  saveButton: {
-    marginTop: 20,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  saveGradient: {
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  saveButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  settingsItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.border + '30',
-  },
-  settingsLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  settingsLabelContainer: {
-    flex: 1,
-  },
-  settingsSubLabel: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  resetThemeButton: {
-    marginTop: 12,
-    marginHorizontal: 20,
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-  },
-  resetThemeText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  achievementItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-  },
-  achievementInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  achievementIcon: {
-    fontSize: 24,
-    marginRight: 12,
-  },
-  achievementDetails: {
-    flex: 1,
-  },
-  achievementTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 2,
-  },
-  achievementDescription: {
-    fontSize: 14,
-  },
-  achievementDate: {
-    fontSize: 12,
-    fontWeight: '500',
   },
   logoutButton: {
     marginHorizontal: 20,

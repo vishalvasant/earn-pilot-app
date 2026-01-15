@@ -21,6 +21,7 @@ interface GameConfig {
   energy_reward: number;
   daily_play_limit: number;
   play_cooldown_seconds: number;
+  points_per_completion: number;
   is_active?: boolean;
 }
 
@@ -56,6 +57,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     try {
       const response = await api.get('/games');
       const configs = response.data.games || [];
+      console.log('📦 API Response from /games:', JSON.stringify(response.data, null, 2));
+      console.log('🎮 Game Configs:', configs);
       set({ gameConfigs: configs });
     } catch (error) {
       console.error('Error loading game configs:', error);

@@ -197,7 +197,7 @@ export default function TaskDetailScreen() {
             style={[styles.backButton, { backgroundColor: theme.primary }]}
             onPress={() => router.back()}
           >
-            <Text style={styles.backButtonText}>Go Back</Text>
+            <Text style={styles.backButton}>Go Back</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -207,7 +207,7 @@ export default function TaskDetailScreen() {
   if (activeSubtask) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-        <View style={styles.webViewHeader}>
+        <View style={[styles.webViewHeader, { backgroundColor: theme.card, borderBottomColor: theme.border }]}>
           <TouchableOpacity
             style={styles.webViewBackButton}
             onPress={closeSubtask}
@@ -248,7 +248,7 @@ export default function TaskDetailScreen() {
           style={styles.webView}
           startInLoadingState={true}
           renderLoading={() => (
-            <View style={styles.webViewLoading}>
+            <View style={[styles.webViewLoading, { backgroundColor: theme.background }]}>
               <ActivityIndicator size="large" color={theme.primary} />
             </View>
           )}
@@ -266,121 +266,171 @@ export default function TaskDetailScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Header */}
-        <View style={styles.header}>
+        <View style={styles.topHeader}>
           <TouchableOpacity
-            style={styles.headerBackButton}
+            style={styles.backButton}
             onPress={() => router.back()}
           >
-            <Icon name="arrowLeft" size={24} color={theme.text} />
+            <Text style={{ fontSize: 24, color: theme.text }}>‹</Text>
           </TouchableOpacity>
           <Text style={[styles.headerTitle, { color: theme.text }]}>Task Details</Text>
-          <View style={styles.headerSpacer} />
+          <View style={{ width: 40 }} />
         </View>
 
-        {/* Task Info Card */}
-        <View style={[styles.taskCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <LinearGradient
-            colors={task.status === 'completed'
-              ? ['#e8f5e8', '#f0fff0'] 
-              : ['#6366f1', '#8b5cf6']
-            }
-            style={styles.taskGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-          >
-            <View style={styles.taskHeader}>
+        {/* Task Header Card */}
+        <LinearGradient
+          colors={task.status === 'completed'
+            ? [theme.success + '20', theme.success + '10']
+            : [theme.primary, theme.primary + 'CC']
+          }
+          style={[styles.taskHeaderCard, { borderColor: task.status === 'completed' ? theme.success : theme.primary }]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          <View style={{ gap: 15 }}>
+            <View style={{ gap: 8 }}>
               <Text style={[styles.taskTitle, { color: task.status === 'completed' ? theme.success : '#ffffff' }]}>
                 {task.title}
               </Text>
-              <View style={styles.taskMeta}>
-                <Text style={[styles.taskCategory, { color: task.status === 'completed' ? theme.success : 'rgba(255, 255, 255, 0.9)' }]}>
-                  {task.has_subtasks ? 'Multi-step Task' : 'Simple Task'}
-                </Text>
-                <Text style={[styles.taskPoints, { color: task.status === 'completed' ? theme.success : '#ffffff' }]}>
-                  🪙 {task.reward_points} points
-                </Text>
-              </View>
+              <Text style={[styles.taskDesc, { color: task.status === 'completed' ? theme.success + 'CC' : 'rgba(255, 255, 255, 0.85)' }]}>
+                {task.description}
+              </Text>
             </View>
-          </LinearGradient>
-          
-          <View style={styles.taskBody}>
-            <Text style={[styles.taskDescription, { color: theme.textSecondary }]}>
-              {task.description}
-            </Text>
-            
-            <View style={styles.taskStats}>
-              <View style={styles.statItem}>
-                <Icon name="tasks" size={20} color={theme.primary} />
-                <Text style={[styles.statText, { color: theme.text }]}>
-                  {task.subtasks.length} Subtasks
+
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <View style={{ gap: 4 }}>
+                <Text style={{ fontSize: 12, color: task.status === 'completed' ? theme.success + 'AA' : 'rgba(255, 255, 255, 0.7)', fontWeight: '500', textTransform: 'uppercase', letterSpacing: 1 }}>
+                  Reward
+                </Text>
+                <Text style={{ fontSize: 20, fontWeight: '800', color: '#ffffff', marginTop: 4 }}>
+                  💎 {Math.floor(task.reward_points)}
                 </Text>
               </View>
-              <View style={styles.statItem}>
-                <Icon name="checkmark" size={20} color={theme.success} />
-                <Text style={[styles.statText, { color: theme.text }]}>
-                  {task.subtasks.filter(st => st.status === 'completed').length} Completed
-                </Text>
-              </View>
+              {task.status === 'completed' && (
+                <View style={{ alignItems: 'center', gap: 8 }}>
+                  <View style={{ width: 50, height: 50, borderRadius: 25, backgroundColor: theme.success + '40', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: theme.success }}>
+                    <Text style={{ fontSize: 24 }}>✓</Text>
+                  </View>
+                  <Text style={{ color: theme.success, fontSize: 12, fontWeight: '600', textTransform: 'uppercase' }}>Completed</Text>
+                </View>
+              )}
+              {task.status !== 'completed' && task.has_subtasks && (
+                <View style={{ alignItems: 'center', gap: 8 }}>
+                  <View style={{ width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(255, 255, 255, 0.2)', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(255, 255, 255, 0.5)' }}>
+                    <Text style={{ fontSize: 20 }}>📋</Text>
+                  </View>
+                  <Text style={{ color: 'rgba(255, 255, 255, 0.9)', fontSize: 11, fontWeight: '600', textTransform: 'uppercase' }}>Multi-step</Text>
+                </View>
+              )}
             </View>
           </View>
+        </LinearGradient>
+
+        {/* Task Info Section */}
+        <View style={{ paddingHorizontal: 20, marginTop: 25, gap: 15 }}>
+          <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Task Info</Text>
+          
+          <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View style={styles.infoRow}>
+              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Task Type</Text>
+              <Text style={[styles.infoValue, { color: theme.text }]}>{task.has_subtasks ? 'Multi-step' : 'Single Step'}</Text>
+            </View>
+          </View>
+
+          <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View style={styles.infoRow}>
+              <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Status</Text>
+              <Text style={[styles.infoValue, { color: task.status === 'completed' ? theme.success : theme.primary }]}>
+                {task.status === 'completed' ? '✓ Completed' : '◉ Available'}
+              </Text>
+            </View>
+          </View>
+
+          {task.has_subtasks && (
+            <View style={[styles.infoCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Progress</Text>
+                <Text style={[styles.infoValue, { color: theme.text }]}>
+                  {task.subtasks.filter(st => st.status === 'completed').length} / {task.subtasks.length}
+                </Text>
+              </View>
+              <View style={styles.progressBar}>
+                <View
+                  style={[
+                    styles.progressFill,
+                    {
+                      width: `${(task.subtasks.filter(st => st.status === 'completed').length / task.subtasks.length) * 100}%`,
+                      backgroundColor: theme.primary
+                    }
+                  ]}
+                />
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Subtasks Section */}
-        <View style={styles.subtasksSection}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Subtasks</Text>
-          
-          {task.subtasks.length === 0 ? (
-            <View style={[styles.emptyState, { backgroundColor: theme.card, borderColor: theme.border }]}>
-              <Icon name="tasks" size={48} color={theme.textSecondary} />
-              <Text style={[styles.emptyStateText, { color: theme.textSecondary }]}>
-                No subtasks available
-              </Text>
-            </View>
-          ) : (
-            task.subtasks
-              .map((subtask, index) => (
+        {task.has_subtasks && task.subtasks.length > 0 && (
+          <View style={{ paddingHorizontal: 20, marginTop: 30, marginBottom: 20 }}>
+            <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Subtasks</Text>
+            
+            <View style={{ gap: 12, marginTop: 15 }}>
+              {task.subtasks.map((subtask, index) => (
                 <TouchableOpacity
                   key={subtask.id}
                   style={[
-                    styles.subtaskCard,
-                    { backgroundColor: theme.card, borderColor: theme.border },
-                    subtask.status === 'completed' && styles.completedSubtask
+                    styles.subtaskItem,
+                    {
+                      backgroundColor: subtask.status === 'completed' ? theme.card + '80' : theme.card,
+                      borderColor: subtask.status === 'completed' ? theme.success : theme.border
+                    }
                   ]}
-                  onPress={() => openSubtask(subtask)}
+                  onPress={() => {
+                    if (subtask.status !== 'completed') {
+                      openSubtask(subtask);
+                    }
+                  }}
                   disabled={subtask.status === 'completed'}
+                  activeOpacity={subtask.status === 'completed' ? 1 : 0.7}
                 >
-                  <View style={styles.subtaskHeader}>
-                    <View style={styles.subtaskNumber}>
-                      <Text style={[styles.subtaskNumberText, { color: theme.primary }]}>
-                        {index + 1}
-                      </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 15, flex: 1 }}>
+                    <View style={[styles.subtaskNumber, { backgroundColor: subtask.status === 'completed' ? theme.success : theme.primary, borderColor: subtask.status === 'completed' ? theme.success : theme.primary }]}>
+                      {subtask.status === 'completed' ? (
+                        <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '800' }}>✓</Text>
+                      ) : (
+                        <Text style={{ color: '#ffffff', fontSize: 14, fontWeight: '800' }}>{index + 1}</Text>
+                      )}
                     </View>
-                    <View style={styles.subtaskInfo}>
-                      <Text style={[
-                        styles.subtaskTitle,
-                        { color: subtask.status === 'completed' ? theme.textSecondary : theme.text }
-                      ]}>
+
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.subtaskTitle, { color: subtask.status === 'completed' ? theme.textSecondary : theme.text }]}>
                         {subtask.title}
                       </Text>
-                      <Text style={[styles.subtaskDescription, { color: theme.textSecondary }]} numberOfLines={2}>
-                        {subtask.description}
-                      </Text>
-                    </View>
-                    <View style={styles.subtaskRight}>
-                      <Text style={[styles.subtaskPoints, { color: theme.primary }]}>
-                        🪙 {subtask.reward_points}
-                      </Text>
-                      {subtask.status === 'completed' ? (
-                        <Icon name="checkmark" size={24} color={theme.success} />
-                      ) : (
-                        <Icon name="arrowRight" size={24} color={theme.textSecondary} />
+                      {subtask.description && (
+                        <Text style={[styles.subtaskDesc, { color: theme.textSecondary }]} numberOfLines={2}>
+                          {subtask.description}
+                        </Text>
                       )}
                     </View>
                   </View>
+
+                  <View style={{ alignItems: 'flex-end', justifyContent: 'space-between', gap: 8 }}>
+                    <Text style={[styles.subtaskPoints, { color: subtask.status === 'completed' ? theme.textSecondary : theme.primary }]}>
+                      +{subtask.reward_points}
+                    </Text>
+                    {subtask.status === 'completed' ? (
+                      <Text style={{ color: theme.success, fontSize: 12, fontWeight: '600' }}>Done</Text>
+                    ) : (
+                      <Text style={{ color: theme.primary, fontSize: 12, fontWeight: '600' }}>Go →</Text>
+                    )}
+                  </View>
                 </TouchableOpacity>
-              ))
-          )}
-        </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        <View style={{ height: 60 }} />
       </ScrollView>
 
       <ThemedPopup
@@ -408,6 +458,7 @@ const createStyles = (theme: any) => StyleSheet.create({
   loadingText: {
     marginTop: 16,
     fontSize: 16,
+    color: theme.text,
   },
   errorContainer: {
     flex: 1,
@@ -420,162 +471,109 @@ const createStyles = (theme: any) => StyleSheet.create({
     marginTop: 16,
     marginBottom: 24,
     textAlign: 'center',
+    color: theme.text,
   },
-  backButton: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  backButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  header: {
+  topHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingTop: 35,
+    paddingBottom: 20,
   },
-  headerBackButton: {
-    padding: 8,
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerTitle: {
-    flex: 1,
-    fontSize: 20,
-    fontWeight: '600',
-    textAlign: 'center',
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
-  headerSpacer: {
-    width: 40,
-  },
-  taskCard: {
+  taskHeaderCard: {
     marginHorizontal: 20,
-    marginBottom: 24,
-    borderRadius: 16,
+    marginBottom: 30,
+    padding: 24,
+    borderRadius: 24,
     borderWidth: 1,
-    overflow: 'hidden',
-    elevation: 4,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-  },
-  taskGradient: {
-    padding: 20,
-  },
-  taskHeader: {
-    marginBottom: 8,
   },
   taskTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 8,
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.3,
   },
-  taskMeta: {
+  taskDesc: {
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '400',
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+  },
+  infoCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+  },
+  infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  taskCategory: {
-    fontSize: 14,
-    fontWeight: '500',
-    textTransform: 'uppercase',
-  },
-  taskPoints: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  taskBody: {
-    padding: 20,
-  },
-  taskDescription: {
-    fontSize: 16,
-    lineHeight: 24,
-    marginBottom: 20,
-  },
-  taskStats: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statText: {
-    marginLeft: 8,
+  infoLabel: {
     fontSize: 14,
     fontWeight: '500',
   },
-  subtasksSection: {
-    paddingHorizontal: 20,
-    paddingBottom: 40,
+  infoValue: {
+    fontSize: 14,
+    fontWeight: '700',
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 16,
+  progressBar: {
+    height: 6,
+    backgroundColor: theme.border,
+    borderRadius: 3,
+    marginTop: 12,
+    overflow: 'hidden',
   },
-  emptyState: {
-    padding: 40,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
+  progressFill: {
+    height: '100%',
+    borderRadius: 3,
   },
-  emptyStateText: {
-    marginTop: 16,
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  subtaskCard: {
-    marginBottom: 12,
-    borderRadius: 12,
+  subtaskItem: {
+    borderRadius: 18,
     borderWidth: 1,
     padding: 16,
-    elevation: 2,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  completedSubtask: {
-    opacity: 0.7,
-  },
-  subtaskHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
   subtaskNumber: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(100, 100, 255, 0.1)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
-  },
-  subtaskNumberText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  subtaskInfo: {
-    flex: 1,
-    marginRight: 12,
+    flexShrink: 0,
+    borderWidth: 0,
   },
   subtaskTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     marginBottom: 4,
   },
-  subtaskDescription: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  subtaskRight: {
-    alignItems: 'flex-end',
+  subtaskDesc: {
+    fontSize: 13,
+    lineHeight: 18,
   },
   subtaskPoints: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
+    fontSize: 16,
+    fontWeight: '700',
   },
   // WebView styles
   webViewHeader: {
@@ -583,9 +581,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
   },
   webViewBackButton: {
     padding: 8,
@@ -631,6 +627,5 @@ const createStyles = (theme: any) => StyleSheet.create({
     bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
   },
 });
