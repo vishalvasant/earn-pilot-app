@@ -109,17 +109,6 @@ export default function TasksScreen() {
             <Text style={styles.logoText}>DAILY<Text style={{ color: theme.primary }}>TASKS</Text></Text>
           </View>
 
-          {/* Attendance Streak */}
-          <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Attendance Streak</Text>
-          <View style={styles.dailyRow}>
-            {[1,2,3,4,5].map((d, i) => (
-              <View key={i} style={[styles.dayBox, todayIndex === d && styles.dayBoxToday, { borderColor: todayIndex === d ? theme.primary : theme.border, backgroundColor: todayIndex === d ? theme.primary + '10' : theme.card }] }>
-                <Text style={[styles.dayText, { color: todayIndex === d ? theme.primary : theme.text } ]}>D{d}</Text>
-                <Text style={[styles.dayPoints, { color: theme.primary }]}>+{d*10}</Text>
-              </View>
-            ))}
-          </View>
-
           {/* Active Modules */}
           <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Active Modules</Text>
 

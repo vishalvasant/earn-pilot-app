@@ -73,12 +73,12 @@ export default {
   extra: {
     // Dynamically set API URL based on environment or default to localhost
     // Local API (Active)
-    // API_BASE_URL: "http://192.168.31.242:8000",
+    API_BASE_URL: "http://192.168.31.206:8000",
     eas: {
       projectId: "156da554-3870-41b3-9a68-2191a71f936d"
     },
     // For production:
-    API_BASE_URL: "https://networks11.com",
+    // API_BASE_URL: "https://networks11.com",
     // For local development (LAN):
     // API_BASE_URL: "http://192.168.31.25:8000", // Real device
   },

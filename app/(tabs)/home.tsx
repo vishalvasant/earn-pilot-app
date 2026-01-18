@@ -93,6 +93,7 @@ export default function HomeScreen() {
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [greeting, setGreeting] = useState(getGreeting());
   const [featuredTasks, setFeaturedTasks] = useState<any[]>([]);
+  const [quizCategories, setQuizCategories] = useState<any[]>([]);
 
   // Single initialization effect
   useEffect(() => {
@@ -106,10 +107,28 @@ export default function HomeScreen() {
         
         setDashboard(dashboardData?.data ?? dashboardData ?? null);
         
-        // Filter featured tasks (check for is_featured or featured field)
-        const tasks = tasksResponse?.data?.data || [];
-        const featured = tasks.filter((task: any) => task.is_featured || task.featured);
-        setFeaturedTasks(featured.slice(0, 3)); // Show max 3 featured tasks
+        // Fetch featured tasks from API
+        try {
+          const featuredResponse = await api.get('/tasks/featured');
+          const featured = featuredResponse?.data?.data || [];
+          setFeaturedTasks(featured.slice(0, 3)); // Show max 3 featured tasks
+        } catch (error) {
+          console.log('Featured tasks not available:', error);
+          // Fallback to filtering from all tasks if endpoint fails
+          const tasks = tasksResponse?.data?.data || [];
+          const featured = tasks.filter((task: any) => task.is_featured || task.featured);
+          setFeaturedTasks(featured.slice(0, 3));
+        }
+        
+        // Fetch quiz categories
+        try {
+          const quizzesResponse = await api.get('/quizzes');
+          const quizzes = quizzesResponse?.data?.data || [];
+          setQuizCategories(quizzes.slice(0, 4)); // Show max 4 quiz categories
+        } catch (error) {
+          console.log('Quiz categories not available:', error);
+          setQuizCategories([]);
+        }
         
         // If profile is not set, try to fetch it from the API
         if (!profile?.id) {
@@ -409,6 +428,59 @@ export default function HomeScreen() {
           <Text style={styles.bannerTitle}>Smart Yield</Text>
           <Text style={styles.bannerSubtitle}>Your 1.5x Multiplier is currently Active</Text>
         </LinearGradient>
+
+        {/* Quiz Section */}
+        {quizCategories.length > 0 && (
+          <>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.xl, marginTop: spacing.lg, marginBottom: spacing.md }}>
+              <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>BRAIN TEASER QUIZ</Text>
+              <TouchableOpacity onPress={() => router.push('/quizzes')}>
+                <Text style={{ color: theme.primary, fontSize: typography.xs, fontWeight: '700' }}>All Quizzes</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={{ paddingHorizontal: spacing.xl, marginBottom: spacing.lg, gap: spacing.md }}>
+              {quizCategories.map((quiz) => (
+                <TouchableOpacity
+                  key={quiz.id}
+                  style={[styles.quizCard, { backgroundColor: theme.card, borderColor: theme.border }]}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.quizTitle, { color: theme.text }]}>{quiz.category || quiz.title}</Text>
+                    {quiz.description && <Text style={[styles.quizDesc, { color: theme.textSecondary }]}>{quiz.description}</Text>}
+                    <View style={{ flexDirection: 'row', gap: spacing.lg, marginTop: spacing.sm }}>
+                      {quiz.question_count && <Text style={[styles.quizMeta, { color: theme.textSecondary }]}>📋 {quiz.question_count} Q's</Text>}
+                      {quiz.difficulty && <Text style={[styles.quizMeta, { color: theme.textSecondary }]}>⭐ {quiz.difficulty}</Text>}
+                    </View>
+                  </View>
+                  <View style={{ alignItems: 'center', gap: spacing.xs }}>
+                    <Text style={[styles.quizReward, { color: theme.primary }]}>+{quiz.reward_points || 50}</Text>
+                    <Text style={[styles.quizPoints, { color: theme.textSecondary }]}>points</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
+
+        {/* Add-On Games */}
+        <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>ADD-ON GAMES</Text>
+        <View style={styles.addOnGamesGrid}>
+          {[
+            { id: 1, name: 'Pilot Jump', emoji: '✈️' },
+            { id: 2, name: 'Water Sort', emoji: '💧' }
+          ].map((game) => (
+            <TouchableOpacity
+              key={game.id}
+              style={[styles.addOnGameCard, { backgroundColor: theme.card, borderColor: theme.border }]}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.addOnGameEmoji}>{game.emoji}</Text>
+              <Text style={[styles.addOnGameName, { color: theme.text }]}>{game.name}</Text>
+              <Text style={[styles.comingSoonLabel, { color: theme.textSecondary }]}>Coming Soon</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
         {/* Mini Games */}
         <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>MINI GAMES</Text>
@@ -788,6 +860,66 @@ const styles = StyleSheet.create({
   },
   cooldownText: {
     fontSize: typography.sm,
+    fontWeight: '600',
+  },
+  addOnGamesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    marginBottom: spacing.lg,
+  },
+  addOnGameCard: {
+    width: (screenWidth - spacing.xl * 2 - spacing.md) / 2,
+    borderRadius: borderRadius.xl,
+    borderWidth: 1,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    gap: spacing.sm,
+    opacity: 0.7,
+  },
+  addOnGameEmoji: {
+    fontSize: 40,
+  },
+  addOnGameName: {
+    fontSize: typography.base,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  comingSoonLabel: {
+    fontSize: typography.xs,
+    fontWeight: '600',
+  },
+  quizCard: {
+    flexDirection: 'row',
+    borderRadius: borderRadius.xl,
+    borderWidth: 1,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  quizTitle: {
+    fontSize: typography.base,
+    fontWeight: '700',
+    marginBottom: spacing.xs,
+  },
+  quizDesc: {
+    fontSize: typography.xs,
+    marginBottom: spacing.sm,
+  },
+  quizMeta: {
+    fontSize: typography.xs,
+    fontWeight: '600',
+  },
+  quizReward: {
+    fontSize: typography.lg,
+    fontWeight: '800',
+  },
+  quizPoints: {
+    fontSize: typography.xs,
     fontWeight: '600',
   },
   taskCard: {
