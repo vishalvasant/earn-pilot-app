@@ -1,0 +1,12 @@
+{
+  "name": "earn-pilot-mobile",
+  "displayName": "Earn Pilot",
+  "version": "1.0.0",
+  "firebaseApiKey": "AIzaSyB3chLVqKe4sVZS5vJwLv9zM3DpZQQJ8o0",
+  "firebaseAuthDomain": "earnpilot-1a4da.firebaseapp.com",
+  "firebaseProjectId": "earnpilot-1a4da",
+  "firebaseStorageBucket": "earnpilot-1a4da.appspot.com",
+  "firebaseMessagingSenderId": "418483943784",
+  "firebaseAppId": "1:418483943784:android:5f8c3f4e2b1a9d6c0e1f2g",
+  "googleClientId": "418483943784-mf6kvqoh1ggutd3emttakl7hprnlf5s5.apps.googleusercontent.com"
+}

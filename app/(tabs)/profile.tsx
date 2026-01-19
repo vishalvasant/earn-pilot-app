@@ -12,29 +12,19 @@ import {
   Modal,
   Dimensions,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import LinearGradient from 'react-native-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
 import { getProfile } from '../../services/api';
 import { useTheme } from '../../hooks/useTheme';
 import { useAuthStore } from '../../stores/authStore';
 import { useUserStore } from '../../stores/userStore';
 import ThemedPopup from '../../components/ThemedPopup';
 import { useAdMob } from '../../hooks/useAdMob';
-
-// Safely import BannerAd
-let BannerAd: any = null;
-let BannerAdSize: any = null;
-try {
-  const admobModule = require('react-native-google-mobile-ads');
-  BannerAd = admobModule.BannerAd;
-  BannerAdSize = admobModule.BannerAdSize;
-} catch (e) {
-  console.log('AdMob not available');
-}
+import FixedBannerAd from '../../components/FixedBannerAd';
 
 function ProfileScreen() {
   const theme = useTheme();
-  const router = useRouter();
+  const navigation = useNavigation();
   const { shouldShowBanner, getBannerAdId } = useAdMob();
   const logout = useAuthStore((s) => s.logout);
   const userStore = useUserStore();
@@ -142,14 +132,8 @@ function ProfileScreen() {
         <TouchableOpacity style={[styles.listItem, { borderColor: '#442', marginTop: 20 }]} onPress={() => setShowLogoutModal(true)}>
           <Text style={{ color: '#ff4444', fontWeight: 'bold' }}>Terminte Session</Text>
         </TouchableOpacity>
-        {/* Banner Ad */}
-        {shouldShowBanner && BannerAd && (
-          <View style={{ alignItems: 'center', paddingVertical: 8, backgroundColor: theme.background }}>
-            <BannerAd unitId={getBannerAdId()} size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER} />
-          </View>
-        )}
 
-        <View style={{ height: 50 }} />
+        <View style={{ height: 150 }} />
       </ScrollView>
 
       {popup?.visible && (
@@ -175,6 +159,13 @@ function ProfileScreen() {
           </View>
         </View>
       </Modal>
+      
+      {/* Fixed Banner Ad above Tab Bar */}
+      <FixedBannerAd
+        shouldShowBanner={shouldShowBanner}
+        getBannerAdId={getBannerAdId}
+        backgroundColor={theme.background}
+      />
     </SafeAreaView>
   );
 }

@@ -13,12 +13,13 @@ import {
   RefreshControl,
   Dimensions
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import LinearGradient from 'react-native-linear-gradient';
 import { useTheme } from '../../hooks/useTheme';
 import { api } from '../../services/api';
 import { useAdMob } from '../../hooks/useAdMob';
 import Icon from '../../components/Icon';
 import ThemedPopup from '../../components/ThemedPopup';
+import FixedBannerAd from '../../components/FixedBannerAd';
 
 // Safely import BannerAd - may not be available in Expo Go
 let BannerAd: any = null;
@@ -419,17 +420,7 @@ export default function WalletScreen() {
           </View>
         )}
 
-        {/* Banner Ad */}
-        {shouldShowBanner && BannerAd && (
-          <View style={{ alignItems: 'center', paddingVertical: 8, backgroundColor: theme.background }}>
-            <BannerAd
-              unitId={getBannerAdId()}
-              size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-            />
-          </View>
-        )}
-
-        <View style={{ height: 80 }} />
+        <View style={{ height: 150 }} />
       </ScrollView>
 
       {/* Withdrawal Modal */}
@@ -595,6 +586,13 @@ export default function WalletScreen() {
           onConfirm={popup.onConfirm}
         />
       )}
+      
+      {/* Fixed Banner Ad above Tab Bar */}
+      <FixedBannerAd
+        shouldShowBanner={shouldShowBanner}
+        getBannerAdId={getBannerAdId}
+        backgroundColor={theme.background}
+      />
     </SafeAreaView>
   );
 }

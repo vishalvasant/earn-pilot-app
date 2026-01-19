@@ -1,6 +1,6 @@
 import React, { useState, memo } from 'react';
 import { View, Text, TextInput, TouchableOpacity } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import LinearGradient from 'react-native-linear-gradient';
 
 interface ProfileEditFormProps {
   user: any;

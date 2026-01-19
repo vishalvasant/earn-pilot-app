@@ -160,7 +160,10 @@ export default function VerifyOtpScreen() {
         });
 
         // Success - existing user
-        await setAuth({ token: response.token });
+        await setAuth({ 
+          token: response.token,
+          user: response.user
+        });
         setProfile(response.user);
         router.replace('/(tabs)/home');
         
@@ -210,7 +213,10 @@ export default function VerifyOtpScreen() {
       });
 
       // Success
-      await setAuth({ token: response.token });
+      await setAuth({ 
+        token: response.token,
+        user: response.user
+      });
       setProfile(response.user);
       
       Alert.alert(

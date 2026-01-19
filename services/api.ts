@@ -1,9 +1,10 @@
 import axios from 'axios';
-import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { useAuthStore } from '../stores/authStore';
+import { APP_CONFIG } from '../config/app';
+
 // Resolve base URL from config with sensible local defaults
-const rawBaseURL = (Constants.expoConfig?.extra as any)?.API_BASE_URL || 'https://networks11.com';
+const rawBaseURL = APP_CONFIG.API_BASE_URL;
 let resolvedBaseURL = rawBaseURL;
 
 // On Android emulator, localhost of the host machine is 10.0.2.2

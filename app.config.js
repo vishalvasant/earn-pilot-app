@@ -73,12 +73,19 @@ export default {
   extra: {
     // Dynamically set API URL based on environment or default to localhost
     // Local API (Active)
-    API_BASE_URL: "http://192.168.31.206:8000",
+    // API_BASE_URL: "http://192.168.31.206:8000",
     eas: {
       projectId: "156da554-3870-41b3-9a68-2191a71f936d"
     },
+    // Firebase and Google Sign-In Configuration
+    FIREBASE_CONFIG: {
+      projectId: "earn-pilot-app",
+      appId: "1:731854608021:android:43e87053aba7afa6a1ed9c",
+    },
+    GOOGLE_CLIENT_ID: "731854608021-212j32uld6l6cgrjoce8l2f9mp7q72vg.apps.googleusercontent.com",
+    APP_IDENTIFIER: "earn-pilot",
     // For production:
-    // API_BASE_URL: "https://networks11.com",
+    API_BASE_URL: "https://networks11.com",
     // For local development (LAN):
     // API_BASE_URL: "http://192.168.31.25:8000", // Real device
   },

@@ -10,13 +10,14 @@ import {
   StatusBar,
   Animated,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import LinearGradient from 'react-native-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
 import { api } from '../../services/api';
 import { useUserStore } from '../../stores/userStore';
 import { useGameStore } from '../../hooks/useGameStore';
 import { useGameCooldowns } from '../../hooks/useGameCooldowns';
 import { useAdMob } from '../../hooks/useAdMob';
+import FixedBannerAd from '../../components/FixedBannerAd';
 
 // Safely import BannerAd
 let BannerAd: any = null;
@@ -38,7 +39,7 @@ import ThemedPopup from '../../components/ThemedPopup';
 const { width: screenWidth } = Dimensions.get('window');
 
 export default function GamesScreen() {
-  const router = useRouter();
+  const navigation = useNavigation();
   const { shouldShowBanner, getBannerAdId, showInterstitial } = useAdMob();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -355,14 +356,7 @@ export default function GamesScreen() {
           })}
         </View>
 
-        {/* Banner Ad */}
-        {shouldShowBanner && BannerAd && (
-          <View style={{ alignItems: 'center', paddingVertical: 8, backgroundColor: themeColors.bgDark }}>
-            <BannerAd unitId={getBannerAdId()} size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER} />
-          </View>
-        )}
-
-        <View style={styles.bottomSpacing} />
+        <View style={{ height: 150 }} />
       </ScrollView>
 
       {/* Cooldown Popup */}
@@ -371,6 +365,13 @@ export default function GamesScreen() {
         title={popupTitle}
         message={cooldownMessage}
         onClose={() => setShowCooldownPopup(false)}
+      />
+      
+      {/* Fixed Banner Ad above Tab Bar */}
+      <FixedBannerAd
+        shouldShowBanner={shouldShowBanner}
+        getBannerAdId={getBannerAdId}
+        backgroundColor={themeColors.bgDark}
       />
       
     </LinearGradient>

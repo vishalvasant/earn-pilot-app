@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Image, Animated, StyleSheet, Dimensions, Text, Easing } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import LinearGradient from 'react-native-linear-gradient';
 
 const mascot = require('../assets/images/NewPilot.png');
 const { width, height } = Dimensions.get('window');

@@ -9,10 +9,11 @@ import {
   StatusBar,
   Dimensions,
   Animated,
-  Modal
+  Modal,
+  Image
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import LinearGradient from 'react-native-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../../hooks/useTheme';
 import { api } from '../../services/api';
 import { useUserStore } from '../../stores/userStore';
@@ -27,17 +28,9 @@ import ImageSimilarityGame from '../../components/games/ImageSimilarityGame';
 import MathQuizGame from '../../components/games/MathQuizGame';
 import MemoryPatternGame from '../../components/games/MemoryPatternGame';
 import ThemedPopup from '../../components/ThemedPopup';
-
-// Safely import BannerAd - may not be available in Expo Go
-let BannerAd: any = null;
-let BannerAdSize: any = null;
-try {
-  const admobModule = require('react-native-google-mobile-ads');
-  BannerAd = admobModule.BannerAd;
-  BannerAdSize = admobModule.BannerAdSize;
-} catch (e) {
-  console.log('AdMob not available in Expo Go');
-}
+import { useAuthStore } from '../../stores/authStore';
+import { requestNotificationPermission, getFCMToken, registerDeviceToken, setupMessageHandlers } from '../../services/fcm';
+import FixedBannerAd from '../../components/FixedBannerAd';
 
 const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
 
@@ -55,7 +48,7 @@ const getGreeting = () => {
 };
 
 export default function HomeScreen() {
-  const router = useRouter();
+  const navigation = useNavigation();
   const theme = useTheme();
   const { shouldShowBanner, getBannerAdId, showInterstitial } = useAdMob();
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -66,13 +59,6 @@ export default function HomeScreen() {
   const [cooldownMessage, setCooldownMessage] = useState('');
   const [popupTitle, setPopupTitle] = useState('Game Complete');
   const isInitializingCooldowns = useRef(false);
-  
-  // Debug AdMob
-  useEffect(() => {
-    console.log('🏠 Home: BannerAd available?', !!BannerAd);
-    console.log('🏠 Home: shouldShowBanner?', shouldShowBanner);
-    console.log('🏠 Home: getBannerAdId()', getBannerAdId?.());
-  }, [shouldShowBanner]);
   
   const stats = useGameStore(state => state.stats);
   const loadStats = useGameStore(state => state.loadStats);
@@ -99,6 +85,21 @@ export default function HomeScreen() {
   useEffect(() => {
     const initialize = async () => {
       try {
+        // Initialize FCM for notifications
+        const hasPermission = await requestNotificationPermission();
+        if (hasPermission) {
+          const fcmToken = await getFCMToken();
+          if (fcmToken) {
+            const authToken = useAuthStore.getState().token;
+            if (authToken) {
+              await registerDeviceToken(authToken, fcmToken);
+            }
+          }
+        }
+        
+        // Setup message handlers for incoming notifications
+        setupMessageHandlers();
+        
         const dashboardData = await getDashboardDetails();
         const tasksResponse = await api.get('/tasks');
         
@@ -429,58 +430,60 @@ export default function HomeScreen() {
           <Text style={styles.bannerSubtitle}>Your 1.5x Multiplier is currently Active</Text>
         </LinearGradient>
 
-        {/* Quiz Section */}
-        {quizCategories.length > 0 && (
-          <>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.xl, marginTop: spacing.lg, marginBottom: spacing.md }}>
-              <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>BRAIN TEASER QUIZ</Text>
-              <TouchableOpacity onPress={() => router.push('/quizzes')}>
-                <Text style={{ color: theme.primary, fontSize: typography.xs, fontWeight: '700' }}>All Quizzes</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={{ paddingHorizontal: spacing.xl, marginBottom: spacing.lg, gap: spacing.md }}>
-              {quizCategories.map((quiz) => (
-                <TouchableOpacity
-                  key={quiz.id}
-                  style={[styles.quizCard, { backgroundColor: theme.card, borderColor: theme.border }]}
-                  activeOpacity={0.7}
-                >
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.quizTitle, { color: theme.text }]}>{quiz.category || quiz.title}</Text>
-                    {quiz.description && <Text style={[styles.quizDesc, { color: theme.textSecondary }]}>{quiz.description}</Text>}
-                    <View style={{ flexDirection: 'row', gap: spacing.lg, marginTop: spacing.sm }}>
-                      {quiz.question_count && <Text style={[styles.quizMeta, { color: theme.textSecondary }]}>📋 {quiz.question_count} Q's</Text>}
-                      {quiz.difficulty && <Text style={[styles.quizMeta, { color: theme.textSecondary }]}>⭐ {quiz.difficulty}</Text>}
-                    </View>
-                  </View>
-                  <View style={{ alignItems: 'center', gap: spacing.xs }}>
-                    <Text style={[styles.quizReward, { color: theme.primary }]}>+{quiz.reward_points || 50}</Text>
-                    <Text style={[styles.quizPoints, { color: theme.textSecondary }]}>points</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </>
-        )}
-
         {/* Add-On Games */}
         <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>ADD-ON GAMES</Text>
         <View style={styles.addOnGamesGrid}>
           {[
-            { id: 1, name: 'Pilot Jump', emoji: '✈️' },
-            { id: 2, name: 'Water Sort', emoji: '💧' }
+            { id: 1, name: 'Pilot Jump', image: require('../../assets/images/pilot-jump.png') },
+            { id: 2, name: 'Water Sort', image: require('../../assets/images/water-sort.png') }
           ].map((game) => (
             <TouchableOpacity
               key={game.id}
               style={[styles.addOnGameCard, { backgroundColor: theme.card, borderColor: theme.border }]}
               activeOpacity={0.7}
             >
-              <Text style={styles.addOnGameEmoji}>{game.emoji}</Text>
+              <Image 
+                source={game.image} 
+                style={styles.addOnGameImage}
+                resizeMode="contain"
+              />
               <Text style={[styles.addOnGameName, { color: theme.text }]}>{game.name}</Text>
               <Text style={[styles.comingSoonLabel, { color: theme.textSecondary }]}>Coming Soon</Text>
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Brain Teaser Quiz Section - Always Visible */}
+        <Text style={[styles.sectionLabel, { color: theme.textSecondary, marginTop: spacing.lg }]}>BRAIN TEASER QUIZ</Text>
+        {quizCategories.length > 0 ? (
+          <View style={{ paddingHorizontal: spacing.xl, marginBottom: spacing.lg, gap: spacing.md }}>
+            {quizCategories.map((quiz) => (
+              <TouchableOpacity
+                key={quiz.id}
+                style={[styles.quizCard, { backgroundColor: theme.card, borderColor: theme.border }]}
+                activeOpacity={0.7}
+                onPress={() => console.log('Quiz selected:', quiz.id, quiz.title || quiz.category)}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.quizTitle, { color: theme.text }]}>{quiz.category || quiz.title}</Text>
+                  {quiz.description && <Text style={[styles.quizDesc, { color: theme.textSecondary }]}>{quiz.description}</Text>}
+                  <View style={{ flexDirection: 'row', gap: spacing.lg, marginTop: spacing.sm }}>
+                    {quiz.question_count && <Text style={[styles.quizMeta, { color: theme.textSecondary }]}>📋 {quiz.question_count} Q's</Text>}
+                    {quiz.difficulty && <Text style={[styles.quizMeta, { color: theme.textSecondary }]}>⭐ {quiz.difficulty}</Text>}
+                  </View>
+                </View>
+                <View style={{ alignItems: 'center', gap: spacing.xs }}>
+                  <Text style={[styles.quizReward, { color: theme.primary }]}>+{quiz.reward_points || 50}</Text>
+                  <Text style={[styles.quizPoints, { color: theme.textSecondary }]}>points</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : (
+          <View style={{ marginHorizontal:spacing['2xl'], paddingHorizontal: spacing.xl, marginBottom: spacing.lg, paddingVertical: spacing.lg, backgroundColor: theme.card, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: theme.border, alignItems: 'center' }}>
+            <Text style={{ color: theme.textSecondary }}>No quizzes available</Text>
+          </View>
+        )}
 
         {/* Mini Games */}
         <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>MINI GAMES</Text>
@@ -518,25 +521,50 @@ export default function HomeScreen() {
             );
           })}
         </View>
-
+        {/* Brain Teaser Quiz Section - Always Visible */}
+        <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>BRAIN TEASER QUIZ</Text>
+        {quizCategories.length > 0 ? (
+          <View style={{ paddingHorizontal: spacing.xl, marginBottom: spacing.lg, gap: spacing.md }}>
+            {quizCategories.map((quiz) => (
+              <TouchableOpacity
+                key={quiz.id}
+                style={[styles.quizCard, { backgroundColor: theme.card, borderColor: theme.border }]}
+                activeOpacity={0.7}
+                onPress={() => console.log('Quiz selected:', quiz.id, quiz.title || quiz.category)}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.quizTitle, { color: theme.text }]}>{quiz.category || quiz.title}</Text>
+                  {quiz.description && <Text style={[styles.quizDesc, { color: theme.textSecondary }]}>{quiz.description}</Text>}
+                  <View style={{ flexDirection: 'row', gap: spacing.lg, marginTop: spacing.sm }}>
+                    {quiz.question_count && <Text style={[styles.quizMeta, { color: theme.textSecondary }]}>📋 {quiz.question_count} Q's</Text>}
+                    {quiz.difficulty && <Text style={[styles.quizMeta, { color: theme.textSecondary }]}>⭐ {quiz.difficulty}</Text>}
+                  </View>
+                </View>
+                <View style={{ alignItems: 'center', gap: spacing.xs }}>
+                  <Text style={[styles.quizReward, { color: theme.primary }]}>+{quiz.reward_points || 50}</Text>
+                  <Text style={[styles.quizPoints, { color: theme.textSecondary }]}>points</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : (
+          <View style={{ paddingHorizontal: spacing.xl, marginBottom: spacing.lg, paddingVertical: spacing.lg, backgroundColor: theme.card, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: theme.border, alignItems: 'center' }}>
+            <Text style={{ color: theme.textSecondary }}>No quizzes available</Text>
+          </View>
+        )}
         {/* Featured Tasks */}
         {featuredTasks.length > 0 && (
           <>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.xl, marginTop: spacing.lg }}>
               <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>FEATURED TASKS</Text>
-              <TouchableOpacity onPress={() => router.push('/(tabs)/tasks')}>
-                <Text style={{ color: theme.primary, fontSize: typography.xs, fontWeight: '700' }}>View All</Text>
-              </TouchableOpacity>
+              {/* Navigation disabled - add screen later */}
             </View>
             <View style={{ paddingHorizontal: spacing.xl, marginBottom: spacing.lg, gap: spacing.md }}>
               {featuredTasks.map((task) => (
                 <TouchableOpacity
                   key={task.id}
                   style={[styles.taskCard, { backgroundColor: theme.card, borderColor: theme.border }]}
-                  onPress={() => router.push({
-                    pathname: '/task-detail',
-                    params: { taskId: task.id.toString() }
-                  })}
+                  onPress={() => console.log('Task detail navigation - add screen later')}
                   activeOpacity={0.7}
                 >
                   <View style={{ flex: 1 }}>
@@ -589,34 +617,8 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Banner Ad or Placeholder (Expo Go) */}
-        {shouldShowBanner && BannerAd ? (
-          <View style={{ alignItems: 'center', paddingVertical: 8, backgroundColor: theme.background }}>
-            <BannerAd
-              unitId={getBannerAdId()}
-              size={BannerAdSize.ANCHORED_ADAPTIVE_BANNER}
-            />
-          </View>
-        ) : (!BannerAd ? (
-          <View style={{ alignItems: 'center', paddingVertical: 10, backgroundColor: theme.background }}>
-            <View style={{
-              width: screenWidth - 32,
-              height: 60,
-              borderRadius: 12,
-              borderWidth: 1,
-              borderColor: theme.border,
-              backgroundColor: theme.card,
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <Text style={{ color: theme.textSecondary, fontWeight: '600' }}>
-                Ad placeholder — Not available in Expo Go
-              </Text>
-            </View>
-          </View>
-        ) : null)}
-
-        <View style={styles.bottomSpacing} />
+        {/* Bottom spacing for fixed banner ad + tab bar */}
+        <View style={{ height: 150 }} />
       </ScrollView>
 
       {/* Cooldown Popup */}
@@ -625,6 +627,13 @@ export default function HomeScreen() {
         title={popupTitle}
         message={cooldownMessage}
         onClose={() => setShowCooldownPopup(false)}
+      />
+      
+      {/* Fixed Banner Ad above Tab Bar */}
+      <FixedBannerAd
+        shouldShowBanner={shouldShowBanner}
+        getBannerAdId={getBannerAdId}
+        backgroundColor={theme.background}
       />
     </SafeAreaView>
   );
@@ -879,8 +888,9 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     opacity: 0.7,
   },
-  addOnGameEmoji: {
-    fontSize: 40,
+  addOnGameImage: {
+    width: 60,
+    height: 60,
   },
   addOnGameName: {
     fontSize: typography.base,

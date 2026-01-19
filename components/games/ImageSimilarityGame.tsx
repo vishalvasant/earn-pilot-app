@@ -7,7 +7,7 @@ import {
   Animated,
   Image,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import LinearGradient from 'react-native-linear-gradient';
 import { useTheme } from '../../hooks/useTheme';
 
 interface ImageSimilarityGameProps {

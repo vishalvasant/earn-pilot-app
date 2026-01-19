@@ -1,10 +1,13 @@
 /**
  * Standardized Icon System
- * Using @expo/vector-icons for consistent, scalable icons throughout the app
+ * Using react-native-vector-icons for consistent, scalable icons throughout the app
  * Excludes mascot/decorative animations which remain as emojis
  */
 
-import { Ionicons, MaterialIcons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';
 
 export const Icons = {
   // Navigation & Core
