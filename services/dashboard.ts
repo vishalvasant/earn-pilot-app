@@ -1,5 +1,6 @@
 // Dashboard API integration for mobile app
 import { api } from './api';
+import { useDataStore } from '../stores/dataStore';
 
 export interface DashboardData {
   balance: number;
@@ -29,17 +30,31 @@ export interface DashboardResponse {
 
 export const getDashboardDetails = async (): Promise<DashboardResponse> => {
   try {
-    // Fetch wallet balance and stats (primary data source)
-    const walletResponse = await api.get('/wallet/balance');
+    // Try to get tasks from store first (to avoid duplicate API call)
+    const dataStore = useDataStore.getState();
+    let tasks = dataStore.tasks;
+    
+    // If tasks are not in store or stale, fetch them
+    if (tasks.length === 0) {
+      try {
+        await dataStore.fetchTasks();
+        tasks = useDataStore.getState().tasks;
+      } catch (error) {
+        console.warn('Failed to fetch tasks from store, fetching directly:', error);
+        // Fallback to direct API call
+        const tasksResponse = await api.get('/tasks');
+        tasks = tasksResponse.data.data || [];
+      }
+    }
+    
+    // Fetch wallet balance and stats (primary data source) in parallel with activity
+    const [walletResponse, activityResponse] = await Promise.all([
+      api.get('/wallet/balance'),
+      api.get('/wallet/activity?per_page=5'),
+    ]);
+    
     const walletData = walletResponse.data.data;
-
-    // Fetch recent activity for dashboard
-    const activityResponse = await api.get('/wallet/activity?per_page=5');
     const recentActivities = activityResponse.data.data;
-
-    // Fetch tasks to get pending/completed counts
-    const tasksResponse = await api.get('/tasks');
-    const tasks = tasksResponse.data.data;
     
     const pendingTasks = tasks.filter((task: any) => task.status === 'available' && !task.disabled).length;
     const completedTasks = tasks.filter((task: any) => task.status === 'completed').length;

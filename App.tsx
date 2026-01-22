@@ -24,6 +24,8 @@ import TasksScreen from './app/(tabs)/tasks';
 import GamesScreen from './app/(tabs)/games';
 import WalletScreen from './app/(tabs)/wallet';
 import ProfileScreen from './app/(tabs)/profile';
+import TaskDetailScreen from './app/task-detail';
+import QuizzesScreen from './app/quizzes';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -36,6 +38,29 @@ const AuthStack = () => {
       }}
     >
       <Stack.Screen name="Login" component={LoginScreen} />
+    </Stack.Navigator>
+  );
+};
+
+// Create a nested stack for tabs to allow TaskDetail navigation
+const MainStack = () => {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+      }}
+    >
+      <Stack.Screen name="Tabs" component={TabNavigator} />
+      <Stack.Screen 
+        name="TaskDetail" 
+        component={TaskDetailScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen 
+        name="quizzes" 
+        component={QuizzesScreen}
+        options={{ animation: 'slide_from_right', title: 'Brain Teaser Quiz' }}
+      />
     </Stack.Navigator>
   );
 };
@@ -177,7 +202,7 @@ const RootStack = () => {
       {isAuthenticated ? (
         <Stack.Screen
           name="MainApp"
-          component={TabNavigator}
+          component={MainStack}
         />
       ) : (
         <Stack.Screen

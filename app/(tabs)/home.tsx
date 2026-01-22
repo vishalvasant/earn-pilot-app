@@ -10,7 +10,8 @@ import {
   Dimensions,
   Animated,
   Modal,
-  Image
+  Image,
+  Alert
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
@@ -19,6 +20,7 @@ import { api } from '../../services/api';
 import { useUserStore } from '../../stores/userStore';
 import { useGameStore } from '../../hooks/useGameStore';
 import { useGameCooldowns } from '../../hooks/useGameCooldowns';
+import { useDataStore } from '../../stores/dataStore';
 import { typography, spacing, borderRadius } from '../../hooks/useThemeColors';
 import Icon from '../../components/Icon';
 import { useAdMob } from '../../hooks/useAdMob';
@@ -31,6 +33,7 @@ import ThemedPopup from '../../components/ThemedPopup';
 import { useAuthStore } from '../../stores/authStore';
 import { requestNotificationPermission, getFCMToken, registerDeviceToken, setupMessageHandlers } from '../../services/fcm';
 import FixedBannerAd from '../../components/FixedBannerAd';
+import { UnityLauncherService } from '../../services/unityLauncher';
 
 const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
 
@@ -51,6 +54,7 @@ export default function HomeScreen() {
   const navigation = useNavigation();
   const theme = useTheme();
   const { shouldShowBanner, getBannerAdId, showInterstitial } = useAdMob();
+  const token = useAuthStore(state => state.token);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const [refreshing, setRefreshing] = useState(false);
@@ -70,79 +74,82 @@ export default function HomeScreen() {
   const addPoints = useGameStore(state => state.addPoints);
   const { checkGameCooldown, setCooldown, getCooldown, removeCooldown } = useGameCooldowns();
   
-  // Debug game configs
+  // Debug game configs (only log when configs actually change, not on every render)
   useEffect(() => {
-    console.log('🎮 Game Configs Loaded:', gameConfigs.length, gameConfigs);
-  }, [gameConfigs]);
+    if (gameConfigs.length > 0) {
+      console.log('🎮 Game Configs Loaded:', gameConfigs.length);
+    }
+  }, [gameConfigs.length]);
   
   const [dashboard, setDashboard] = useState<any>(null);
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [greeting, setGreeting] = useState(getGreeting());
-  const [featuredTasks, setFeaturedTasks] = useState<any[]>([]);
-  const [quizCategories, setQuizCategories] = useState<any[]>([]);
+  
+  // Use centralized data store
+  const { 
+    featuredTasks, 
+    quizzes: quizCategories, 
+    fetchAllInitialData 
+  } = useDataStore();
 
   // Single initialization effect
   useEffect(() => {
     const initialize = async () => {
       try {
-        // Initialize FCM for notifications
-        const hasPermission = await requestNotificationPermission();
-        if (hasPermission) {
-          const fcmToken = await getFCMToken();
-          if (fcmToken) {
-            const authToken = useAuthStore.getState().token;
-            if (authToken) {
-              await registerDeviceToken(authToken, fcmToken);
+        // Initialize FCM for notifications (non-blocking)
+        requestNotificationPermission().then(async (hasPermission) => {
+          if (hasPermission) {
+            const fcmToken = await getFCMToken();
+            if (fcmToken) {
+              const authToken = useAuthStore.getState().token;
+              if (authToken) {
+                await registerDeviceToken(authToken, fcmToken);
+              }
             }
           }
-        }
+        }).catch(err => console.warn('FCM initialization error:', err));
         
         // Setup message handlers for incoming notifications
         setupMessageHandlers();
         
-        const dashboardData = await getDashboardDetails();
-        const tasksResponse = await api.get('/tasks');
+        // Fetch all data in parallel: dashboard, games, tasks, quizzes, profile
+        console.log('🚀 Starting parallel data fetch...');
         
-        await loadStats();
-        await loadGameConfigs();
+        await Promise.all([
+          // Dashboard (includes wallet balance, activity, and tasks internally)
+          getDashboardDetails().then(data => {
+            setDashboard(data?.data ?? data ?? null);
+          }).catch(err => {
+            console.warn('Dashboard fetch error:', err);
+            setDashboard(null);
+          }),
+          
+          // Games configs
+          loadGameConfigs().catch(err => {
+            console.warn('Games configs fetch error:', err);
+          }),
+          
+          // Stats (local storage, fast)
+          loadStats().catch(err => {
+            console.warn('Stats load error:', err);
+          }),
+          
+          // All initial data (tasks, quizzes, profile) - uses centralized store
+          fetchAllInitialData().catch(err => {
+            console.warn('Initial data fetch error:', err);
+          }),
+        ]);
         
-        setDashboard(dashboardData?.data ?? dashboardData ?? null);
-        
-        // Fetch featured tasks from API
-        try {
-          const featuredResponse = await api.get('/tasks/featured');
-          const featured = featuredResponse?.data?.data || [];
-          setFeaturedTasks(featured.slice(0, 3)); // Show max 3 featured tasks
-        } catch (error) {
-          console.log('Featured tasks not available:', error);
-          // Fallback to filtering from all tasks if endpoint fails
-          const tasks = tasksResponse?.data?.data || [];
-          const featured = tasks.filter((task: any) => task.is_featured || task.featured);
-          setFeaturedTasks(featured.slice(0, 3));
+        // Update user store profile if dataStore has it
+        const dataStoreProfile = useDataStore.getState().profile;
+        if (dataStoreProfile?.id && !profile?.id) {
+          setProfile(dataStoreProfile);
+        } else if (!profile?.id && dataStoreProfile?.id) {
+          // If profile is not set, use the one from dataStore
+          setProfile(dataStoreProfile);
         }
         
-        // Fetch quiz categories
-        try {
-          const quizzesResponse = await api.get('/quizzes');
-          const quizzes = quizzesResponse?.data?.data || [];
-          setQuizCategories(quizzes.slice(0, 4)); // Show max 4 quiz categories
-        } catch (error) {
-          console.log('Quiz categories not available:', error);
-          setQuizCategories([]);
-        }
-        
-        // If profile is not set, try to fetch it from the API
-        if (!profile?.id) {
-          try {
-            const response = await api.get('/profile');
-            const userData = response.data.user || response.data;
-            if (userData?.id) {
-              setProfile(userData);
-            }
-          } catch (profileError) {
-            console.warn('Failed to load user profile:', profileError);
-          }
-        }
+        console.log('✅ All data loaded successfully');
       } catch (e) {
         console.warn('Failed to load initial data', e);
       } finally {
@@ -224,19 +231,32 @@ export default function HomeScreen() {
 
   const handleGameStart = useCallback(async (gameType: 'color-match' | 'image-similarity' | 'math-quiz' | 'memory-pattern') => {
     try {
-      // Ensure we have a user profile
-      if (!profile?.id) {
-        try {
-          const resp = await api.get('/profile');
-          const userData = resp.data.user || resp.data;
-          if (userData?.id) setProfile(userData);
-        } catch (e) {
+      // Ensure we have a user profile - ALWAYS check dataStore first (it has the cache)
+      const dataStore = useDataStore.getState();
+      let currentProfile = dataStore.profile;
+      
+      // If dataStore doesn't have profile, fetch it (fetchProfile handles caching internally)
+      if (!currentProfile?.id) {
+        // fetchProfile() will check cache and return early if cache is valid
+        // So we call it and then check the store again
+        await dataStore.fetchProfile();
+        currentProfile = useDataStore.getState().profile;
+        
+        if (!currentProfile?.id) {
           setPopupTitle('❌ Error');
           setCooldownMessage('User not authenticated. Please log in again.');
           setShowCooldownPopup(true);
           return;
         }
       }
+      
+      // Sync to userStore if needed (for backward compatibility)
+      if (!profile?.id || profile.id !== currentProfile.id) {
+        setProfile(currentProfile);
+      }
+      
+      // Use currentProfile for the rest of the function
+      const userId = currentProfile.id;
 
       // Check local cooldown first
       const cooldown = getCooldown(gameType);
@@ -259,7 +279,7 @@ export default function HomeScreen() {
 
       // Backend validation: can-play
       try {
-        await api.post(`/games/${gameId}/can-play`, { user_id: profile?.id });
+        await api.post(`/games/${gameId}/can-play`, { user_id: userId });
       } catch (err: any) {
         const msg = err?.response?.data?.message || 'You cannot play this game right now.';
         setPopupTitle('⏳ Please Wait');
@@ -270,7 +290,7 @@ export default function HomeScreen() {
 
       // Start session
       try {
-        await api.post(`/games/${gameId}/start`, { user_id: profile?.id });
+        await api.post(`/games/${gameId}/start`, { user_id: userId });
       } catch (err: any) {
         const msg = err?.response?.data?.message || 'Failed to start game session.';
         setPopupTitle('❌ Error');
@@ -291,8 +311,12 @@ export default function HomeScreen() {
 
   const refreshUserProfile = useCallback(async () => {
     try {
-      const response = await api.get('/profile');
-      setProfile(response.data.user);
+      // Use dataStore to fetch profile (with caching)
+      await useDataStore.getState().fetchProfile(true); // Force refresh
+      const refreshedProfile = useDataStore.getState().profile;
+      if (refreshedProfile) {
+        setProfile(refreshedProfile);
+      }
     } catch (error) {
       console.error('Failed to refresh user profile:', error);
     }
@@ -317,10 +341,13 @@ export default function HomeScreen() {
           return;
         }
 
-        await api.post(`/games/${gameId}/complete`, {
-          user_id: profile.id,
-          points_earned: points,
+        const response = await api.post(`/games/${gameId}/complete`, {
+          score: points, // Game score for tracking
         });
+
+        // Get actual reward points from backend response (not game score)
+        const actualPointsEarned = response.data.points_earned || 0;
+        const energyEarned = response.data.energy_earned || 0;
 
         // Show interstitial ad after game completion
         try {
@@ -329,9 +356,10 @@ export default function HomeScreen() {
           console.log('Ad not shown:', adError);
         }
 
+        // Only track game stats locally, points are handled by backend
         addPoints(points, activeGame);
         setPopupTitle('🎉 Game Complete');
-        setCooldownMessage(`Great job! You earned ${points} points!`);
+        setCooldownMessage(`Great job! You earned ${actualPointsEarned} reward points and ${energyEarned} energy!`);
         setShowCooldownPopup(true);
 
         await refreshUserProfile();
@@ -430,17 +458,83 @@ export default function HomeScreen() {
           <Text style={styles.bannerSubtitle}>Your 1.5x Multiplier is currently Active</Text>
         </LinearGradient>
 
+        {/* Banner Ad above Add-On Games */}
+        {shouldShowBanner && (() => {
+          try {
+            const { BannerAd, BannerAdSize } = require('react-native-google-mobile-ads');
+            return (
+              <View style={[styles.inlineBannerAd, { backgroundColor: theme.background }]}>
+                <BannerAd
+                  unitId={getBannerAdId()}
+                  size={BannerAdSize.BANNER}
+                />
+              </View>
+            );
+          } catch (e) {
+            return null;
+          }
+        })()}
+
         {/* Add-On Games */}
         <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>ADD-ON GAMES</Text>
         <View style={styles.addOnGamesGrid}>
           {[
-            { id: 1, name: 'Pilot Jump', image: require('../../assets/images/pilot-jump.png') },
-            { id: 2, name: 'Water Sort', image: require('../../assets/images/water-sort.png') }
+            { id: 5, name: 'Pilot Jump', image: require('../../assets/images/pilot-jump.png') },
+            { id: 6, name: 'Water Sort', image: require('../../assets/images/water-sort.png') }
           ].map((game) => (
             <TouchableOpacity
               key={game.id}
               style={[styles.addOnGameCard, { backgroundColor: theme.card, borderColor: theme.border }]}
               activeOpacity={0.7}
+              onPress={async () => {
+                try {
+                  if (!token || !profile?.id) {
+                    Alert.alert('Authentication Required', 'Please login to play games');
+                    return;
+                  }
+
+                  // Debug log before launching Unity game
+                  console.log('[HomeScreen] Launching add-on game', {
+                    gameId: game.id,
+                    gameName: game.name,
+                    userId: profile.id,
+                    userEmail: profile.email,
+                    hasToken: !!token,
+                    tokenPrefix: token ? token.slice(0, 12) + '...' : null,
+                  });
+
+                  // Check if Unity game is installed (optional check - try to launch anyway)
+                  try {
+                    const isInstalled = await UnityLauncherService.isUnityGameInstalled();
+                    if (!isInstalled) {
+                      console.warn(`[HomeScreen] ${game.name} installation check failed, but attempting launch anyway...`);
+                      // Don't block - try to launch anyway as the check might be incorrect
+                    }
+                  } catch (checkError) {
+                    console.warn(`[HomeScreen] Installation check failed:`, checkError);
+                    // Continue to launch attempt
+                  }
+
+                  // Launch Unity game with authentication (using email for mapping)
+                  await UnityLauncherService.launchUnityGame({
+                    authToken: token, // Keep token as backup
+                    userId: profile.id,
+                    userEmail: profile.email, // Pass email for email-based authentication
+                    gameId: game.id,
+                    apiBaseUrl: 'http://192.168.31.206:8000/api', // Local server (Android emulator uses 10.0.2.2 for host's localhost)
+                    // apiBaseUrl: 'https://networks11.com/api', // Production API URL (uncomment when deploying)
+                  });
+
+                  console.log('[HomeScreen] Unity launch request sent');
+                } catch (error: any) {
+                  console.error(`[HomeScreen] Failed to launch ${game.name}:`, error);
+                  Alert.alert(
+                    'Launch Failed',
+                    `Failed to launch ${game.name}: ${error.message}`,
+                    [{ text: 'OK' }]
+                  );
+                }
+              }}
             >
               <Image 
                 source={game.image} 
@@ -448,52 +542,52 @@ export default function HomeScreen() {
                 resizeMode="contain"
               />
               <Text style={[styles.addOnGameName, { color: theme.text }]}>{game.name}</Text>
-              <Text style={[styles.comingSoonLabel, { color: theme.textSecondary }]}>Coming Soon</Text>
+              <Text style={[styles.playLabel, { color: theme.primary }]}>Play Now</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* Brain Teaser Quiz Section - Always Visible */}
+        {/* Brain Teaser Quiz - Styled like Elite Offerwall */}
         <Text style={[styles.sectionLabel, { color: theme.textSecondary, marginTop: spacing.lg }]}>BRAIN TEASER QUIZ</Text>
-        {quizCategories.length > 0 ? (
-          <View style={{ paddingHorizontal: spacing.xl, marginBottom: spacing.lg, gap: spacing.md }}>
-            {quizCategories.map((quiz) => (
-              <TouchableOpacity
-                key={quiz.id}
-                style={[styles.quizCard, { backgroundColor: theme.card, borderColor: theme.border }]}
-                activeOpacity={0.7}
-                onPress={() => console.log('Quiz selected:', quiz.id, quiz.title || quiz.category)}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.quizTitle, { color: theme.text }]}>{quiz.category || quiz.title}</Text>
-                  {quiz.description && <Text style={[styles.quizDesc, { color: theme.textSecondary }]}>{quiz.description}</Text>}
-                  <View style={{ flexDirection: 'row', gap: spacing.lg, marginTop: spacing.sm }}>
-                    {quiz.question_count && <Text style={[styles.quizMeta, { color: theme.textSecondary }]}>📋 {quiz.question_count} Q's</Text>}
-                    {quiz.difficulty && <Text style={[styles.quizMeta, { color: theme.textSecondary }]}>⭐ {quiz.difficulty}</Text>}
-                  </View>
-                </View>
-                <View style={{ alignItems: 'center', gap: spacing.xs }}>
-                  <Text style={[styles.quizReward, { color: theme.primary }]}>+{quiz.reward_points || 50}</Text>
-                  <Text style={[styles.quizPoints, { color: theme.textSecondary }]}>points</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        ) : (
-          <View style={{ marginHorizontal:spacing['2xl'], paddingHorizontal: spacing.xl, marginBottom: spacing.lg, paddingVertical: spacing.lg, backgroundColor: theme.card, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: theme.border, alignItems: 'center' }}>
-            <Text style={{ color: theme.textSecondary }}>No quizzes available</Text>
-          </View>
-        )}
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => {
+            // Navigate to quizzes selection page
+            (navigation as any).navigate('quizzes');
+          }}
+        >
+          <LinearGradient
+            colors={[theme.card, theme.background]}
+            start={{ x: 1, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={[styles.offerwallCard, { borderColor: theme.primary }]}
+          >
+            <View style={styles.offerwallContent}>
+              <Text style={styles.offerwallIcon}>🧠</Text>
+              <Text style={[styles.offerwallTitle, { color: theme.primary }]}>Brain Teaser Quiz</Text>
+              <Text style={[styles.offerwallSubtitle, { color: theme.textSecondary }]}>
+                {quizCategories && quizCategories.length > 0 
+                  ? `${quizCategories.length} Quiz${quizCategories.length > 1 ? 'zes' : ''} Available`
+                  : 'Test Your Knowledge'}
+              </Text>
+              <View style={[styles.offerwallButton, { backgroundColor: theme.primary }]}>
+                <Text style={[styles.offerwallButtonText, { color: theme.background }]}>EXPLORE</Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
 
         {/* Mini Games */}
         <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>MINI GAMES</Text>
         <View style={styles.gamesGrid}>
-          {gameConfigs.filter(game => game.is_active !== false).map((gameConfig) => {
+          {gameConfigs.filter(game => {
+            // Only show mini games (system games), exclude add-on games
+            // Filter by is_system_game flag or check if it's NOT an add-on game
+            const isMiniGame = game.is_system_game === true || (game.is_addon_game !== true && !game.package_name);
+            return game.is_active !== false && isMiniGame;
+          }).map((gameConfig) => {
             const cooldown = getCooldown(gameConfig.slug);
             const isInCooldown = Boolean(cooldown && cooldown.remainingSeconds > 0);
-            
-            // Debug logging
-            console.log(`Game: ${gameConfig.name}, Points: ${gameConfig.points_per_completion}, InCooldown: ${isInCooldown}`);
 
             return (
               <TouchableOpacity
@@ -521,37 +615,6 @@ export default function HomeScreen() {
             );
           })}
         </View>
-        {/* Brain Teaser Quiz Section - Always Visible */}
-        <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>BRAIN TEASER QUIZ</Text>
-        {quizCategories.length > 0 ? (
-          <View style={{ paddingHorizontal: spacing.xl, marginBottom: spacing.lg, gap: spacing.md }}>
-            {quizCategories.map((quiz) => (
-              <TouchableOpacity
-                key={quiz.id}
-                style={[styles.quizCard, { backgroundColor: theme.card, borderColor: theme.border }]}
-                activeOpacity={0.7}
-                onPress={() => console.log('Quiz selected:', quiz.id, quiz.title || quiz.category)}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.quizTitle, { color: theme.text }]}>{quiz.category || quiz.title}</Text>
-                  {quiz.description && <Text style={[styles.quizDesc, { color: theme.textSecondary }]}>{quiz.description}</Text>}
-                  <View style={{ flexDirection: 'row', gap: spacing.lg, marginTop: spacing.sm }}>
-                    {quiz.question_count && <Text style={[styles.quizMeta, { color: theme.textSecondary }]}>📋 {quiz.question_count} Q's</Text>}
-                    {quiz.difficulty && <Text style={[styles.quizMeta, { color: theme.textSecondary }]}>⭐ {quiz.difficulty}</Text>}
-                  </View>
-                </View>
-                <View style={{ alignItems: 'center', gap: spacing.xs }}>
-                  <Text style={[styles.quizReward, { color: theme.primary }]}>+{quiz.reward_points || 50}</Text>
-                  <Text style={[styles.quizPoints, { color: theme.textSecondary }]}>points</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        ) : (
-          <View style={{ paddingHorizontal: spacing.xl, marginBottom: spacing.lg, paddingVertical: spacing.lg, backgroundColor: theme.card, borderRadius: borderRadius.lg, borderWidth: 1, borderColor: theme.border, alignItems: 'center' }}>
-            <Text style={{ color: theme.textSecondary }}>No quizzes available</Text>
-          </View>
-        )}
         {/* Featured Tasks */}
         {featuredTasks.length > 0 && (
           <>
@@ -595,27 +658,6 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
         </LinearGradient>
-
-        {/* Quick Actions */}
-        <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>QUICK ACTIONS</Text>
-        <View style={styles.quickActions}>
-          <TouchableOpacity style={[styles.actionCard, { backgroundColor: theme.card, borderColor: theme.border }]} activeOpacity={0.8}>
-            <Text style={styles.actionIcon}>💰</Text>
-            <Text style={[styles.actionLabel, { color: theme.text }]}>Withdraw</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionCard, { backgroundColor: theme.card, borderColor: theme.border }]} activeOpacity={0.8}>
-            <Text style={styles.actionIcon}>🔥</Text>
-            <Text style={[styles.actionLabel, { color: theme.text }]}>Boost</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionCard, { backgroundColor: theme.card, borderColor: theme.border }]} activeOpacity={0.8}>
-            <Text style={styles.actionIcon}>🎁</Text>
-            <Text style={[styles.actionLabel, { color: theme.text }]}>Rewards</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionCard, { backgroundColor: theme.card, borderColor: theme.border }]} activeOpacity={0.8}>
-            <Text style={styles.actionIcon}>⚙️</Text>
-            <Text style={[styles.actionLabel, { color: theme.text }]}>Settings</Text>
-          </TouchableOpacity>
-        </View>
 
         {/* Bottom spacing for fixed banner ad + tab bar */}
         <View style={{ height: 150 }} />
@@ -809,29 +851,6 @@ const styles = StyleSheet.create({
     fontSize: typography.sm,
     letterSpacing: 1,
   },
-  quickActions: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    paddingHorizontal: spacing.xl,
-    marginBottom: spacing.lg,
-    flexWrap: 'wrap',
-  },
-  actionCard: {
-    width: (screenWidth - spacing.xl * 2 - spacing.md * 3) / 4,
-    borderRadius: borderRadius.lg,
-    borderWidth: 1,
-    paddingVertical: spacing.lg,
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  actionIcon: {
-    fontSize: 20,
-  },
-  actionLabel: {
-    fontSize: typography.xs,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
   gamesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -897,6 +916,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
   },
+  playLabel: {
+    fontSize: typography.sm,
+    fontWeight: '600',
+    marginTop: spacing.xs,
+  },
   comingSoonLabel: {
     fontSize: typography.xs,
     fontWeight: '600',
@@ -956,5 +980,12 @@ const styles = StyleSheet.create({
   },
   bottomSpacing: {
     height: 120,
+  },
+  inlineBannerAd: {
+    marginHorizontal: spacing.xl,
+    marginVertical: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 50,
   },
 });

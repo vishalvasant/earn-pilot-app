@@ -10,8 +10,8 @@ import {
   Dimensions,
   BackHandler,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useRoute, useNavigation } from '@react-navigation/native';
+import LinearGradient from 'react-native-linear-gradient';
 import { WebView } from 'react-native-webview';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../hooks/useTheme';
@@ -48,8 +48,9 @@ interface TaskDetail {
 }
 
 export default function TaskDetailScreen() {
-  const { taskId } = useLocalSearchParams();
-  const router = useRouter();
+  const route = useRoute<any>();
+  const navigation = useNavigation();
+  const { taskId } = route.params || {};
   const theme = useTheme();
   const { showInterstitial } = useAdMob();
   
@@ -172,6 +173,50 @@ export default function TaskDetailScreen() {
     setActiveSubtask(null);
   };
 
+  const handleStartTask = async () => {
+    if (!task) return;
+    
+    try {
+      const response = await api.post(`/tasks/${task.id}/start`);
+      if (response.data.success) {
+        showPopup('Task Started', response.data.message || 'Task started successfully!');
+        // Refresh task data
+        fetchTaskDetail();
+      }
+    } catch (error: any) {
+      console.error('Error starting task:', error);
+      showPopup(
+        'Error',
+        error.response?.data?.message || 'Failed to start task'
+      );
+    }
+  };
+
+  const handleCompleteTask = async () => {
+    if (!task) return;
+    
+    try {
+      // Show interstitial ad before completing task
+      try { await showInterstitial(); } catch {}
+      
+      const response = await api.post(`/tasks/${task.id}/complete`);
+      if (response.data.success) {
+        showPopup(
+          'Task Completed!',
+          `You earned ${response.data.points} points!`
+        );
+        // Refresh task data
+        fetchTaskDetail();
+      }
+    } catch (error: any) {
+      console.error('Error completing task:', error);
+      showPopup(
+        'Error',
+        error.response?.data?.message || 'Failed to complete task'
+      );
+    }
+  };
+
   const styles = createStyles(theme);
 
   if (loading || showingAd) {
@@ -195,7 +240,7 @@ export default function TaskDetailScreen() {
           <Text style={[styles.errorText, { color: theme.text }]}>Task not found</Text>
           <TouchableOpacity
             style={[styles.backButton, { backgroundColor: theme.primary }]}
-            onPress={() => router.back()}
+            onPress={() => navigation.goBack()}
           >
             <Text style={styles.backButton}>Go Back</Text>
           </TouchableOpacity>
@@ -269,7 +314,7 @@ export default function TaskDetailScreen() {
         <View style={styles.topHeader}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={() => navigation.goBack()}
           >
             <Text style={{ fontSize: 24, color: theme.text }}>‹</Text>
           </TouchableOpacity>
@@ -430,6 +475,68 @@ export default function TaskDetailScreen() {
           </View>
         )}
 
+        {/* Action Buttons */}
+        {!task.has_subtasks && task.status !== 'completed' && (
+          <View style={{ paddingHorizontal: 20, marginTop: 20, marginBottom: 20, gap: 12 }}>
+            {task.energy_cost > 0 && task.status !== 'in_progress' && (
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: theme.primary }]}
+                onPress={handleStartTask}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.actionButtonText}>
+                  Start Task ({task.energy_cost} energy)
+                </Text>
+              </TouchableOpacity>
+            )}
+            {(task.status === 'in_progress' || task.energy_cost === 0) && (
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: theme.success }]}
+                onPress={handleCompleteTask}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.actionButtonText}>
+                  Complete Task (+{task.reward_points} points)
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        {task.has_subtasks && task.status !== 'completed' && (
+          <View style={{ paddingHorizontal: 20, marginTop: 20, marginBottom: 20 }}>
+            {task.energy_cost > 0 && task.status !== 'in_progress' && (
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: theme.primary }]}
+                onPress={handleStartTask}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.actionButtonText}>
+                  Start Task ({task.energy_cost} energy)
+                </Text>
+              </TouchableOpacity>
+            )}
+            {task.status === 'in_progress' && (
+              <View style={{ gap: 12 }}>
+                <Text style={[styles.sectionLabel, { color: theme.textSecondary, textAlign: 'center' }]}>
+                  Complete all required subtasks to finish
+                </Text>
+                {task.subtasks.filter(st => st.is_required).every(st => st.status === 'completed') && (
+                  <TouchableOpacity
+                    style={[styles.actionButton, { backgroundColor: theme.success }]}
+                    onPress={handleCompleteTask}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.actionButtonText}>
+                      Complete Task (+{task.reward_points} points)
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+          </View>
+        )}
+
         <View style={{ height: 60 }} />
       </ScrollView>
 
@@ -544,6 +651,18 @@ const createStyles = (theme: any) => StyleSheet.create({
   progressFill: {
     height: '100%',
     borderRadius: 3,
+  },
+  actionButton: {
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
   },
   subtaskItem: {
     borderRadius: 18,

@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, Alert } from 'react-native';
-import { Stack } from 'expo-router';
 import { UnityGameView } from '../components/UnityGameView';
-import { useRouter } from 'expo-router';
+import { useNavigation } from '@react-navigation/native';
 import { api } from '../services/api';
 import { useUserStore } from '../stores/userStore';
 
 export default function UnityGameScreen() {
-  const router = useRouter();
+  const navigation = useNavigation();
   const { setProfile } = useUserStore();
   const [gameUrl] = useState('http://localhost:3000'); // Local Unity WebGL build
 
@@ -44,7 +43,7 @@ Duration: ${Math.round((summary.duration || 0) / 60)} minutes`,
         },
         {
           text: 'Back to Home',
-          onPress: () => router.back()
+          onPress: () => navigation.goBack()
         }
       ]
     );

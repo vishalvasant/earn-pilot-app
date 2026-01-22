@@ -4,6 +4,8 @@ import '@react-native-firebase/app'; // Import app first to ensure initializatio
 import auth from '@react-native-firebase/auth';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { APP_CONFIG } from '../config/app';
+import { useDataStore } from './dataStore';
+import { useUserStore } from './userStore';
 
 interface User {
   id: number;
@@ -114,14 +116,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       console.log('Google Sign-In result:', JSON.stringify(userInfo, null, 2));
 
       // Extract ID token from the correct location
-      const idToken = userInfo.data?.idToken || userInfo.idToken;
+      // GoogleSignin.signIn() returns: { idToken, user: {...} } or { data: { idToken, user: {...} } }
+      const idToken = userInfo.idToken || userInfo.data?.idToken || (userInfo as any).idToken;
       
       if (!idToken) {
-        console.error('No idToken found in response:', JSON.stringify(userInfo, null, 2));
-        throw new Error('No ID token received from Google');
+        console.error('No idToken found in response. Full response:', JSON.stringify(userInfo, null, 2));
+        console.error('Response keys:', Object.keys(userInfo));
+        throw new Error('No ID token received from Google. Please try again.');
       }
       
-      console.log('ID Token extracted successfully');
+      console.log('ID Token extracted successfully, length:', idToken.length);
 
       // Create Firebase credential and sign in
       console.log('Creating Firebase credential...');
@@ -163,40 +167,46 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         
         clearTimeout(timeoutId);
         console.log('Backend response status:', response.status);
-        const responseText = await response.text();
-        console.log('Backend response:', responseText);
 
-        if (!response.ok) {
-          let errorData;
-          try {
-            errorData = JSON.parse(responseText);
-          } catch {
-            errorData = { message: `HTTP ${response.status}: ${responseText}` };
-          }
-          throw new Error(errorData.message || `Authentication failed: ${response.status}`);
+        // Parse response as JSON (backend always returns JSON)
+        let data;
+        try {
+          data = await response.json();
+          console.log('Backend response data:', JSON.stringify(data, null, 2));
+        } catch (parseError: any) {
+          console.error('Failed to parse JSON response:', parseError);
+          // If JSON parsing fails, the response might be an error page
+          throw new Error(`Server returned invalid response (${response.status}). Please try again.`);
         }
 
-        const data = JSON.parse(responseText);
-        console.log('Backend data:', data);
+        if (!response.ok) {
+          // Extract error message from backend response
+          const errorMessage = data?.message || data?.error || `Authentication failed: ${response.status}`;
+          console.error('Backend authentication error:', errorMessage);
+          throw new Error(errorMessage);
+        }
 
-        if (data.success && data.data) {
+        // Backend returns: { success: true, user: {...}, token: "..." }
+        if (data.success && data.user && data.token) {
           await get().setAuth({
-            token: data.data.token,
-            user: data.data.user,
+            token: data.token,
+            user: data.user,
           });
           console.log('Authentication completed successfully');
           set({ isLoading: false });
         } else {
-          throw new Error('Login failed: Invalid response from server');
+          console.error('Invalid response structure:', data);
+          throw new Error(data?.message || 'Login failed: Invalid response from server');
         }
       } catch (fetchError: any) {
         clearTimeout(timeoutId);
         if (fetchError.name === 'AbortError') {
           throw new Error('Network timeout - please check your internet connection');
         }
-        if (fetchError.message.includes('Network request failed')) {
-          throw new Error('Cannot connect to server. Please make sure the backend server is running.');
+        if (fetchError.message.includes('Network request failed') || fetchError.message.includes('Failed to fetch')) {
+          throw new Error('Cannot connect to server. Please check your internet connection and ensure the server is running.');
         }
+        // Re-throw the error with its message
         throw fetchError;
       }
     } catch (error: any) {
@@ -220,6 +230,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await AsyncStorage.removeItem('auth_token');
       await AsyncStorage.removeItem('user_data');
       set({ token: null, user: null, isAuthenticated: false });
+      
+      // Clear all stores on logout
+      useDataStore.getState().clearData();
+      useUserStore.getState().clearProfile();
+      console.log('✅ All stores cleared on logout');
     } catch (error) {
       console.error('Logout error:', error);
     }

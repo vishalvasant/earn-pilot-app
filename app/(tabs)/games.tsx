@@ -14,6 +14,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { api } from '../../services/api';
 import { useUserStore } from '../../stores/userStore';
+import { useDataStore } from '../../stores/dataStore';
 import { useGameStore } from '../../hooks/useGameStore';
 import { useGameCooldowns } from '../../hooks/useGameCooldowns';
 import { useAdMob } from '../../hooks/useAdMob';
@@ -64,13 +65,19 @@ export default function GamesScreen() {
       try {
         await loadGameConfigs();
         
-        // If profile is not set, try to fetch it from the API
-        if (!profile?.id) {
+        // Use profile from dataStore (shared with home screen)
+        const dataStoreProfile = useDataStore.getState().profile;
+        if (dataStoreProfile?.id) {
+          if (!profile?.id || profile.id !== dataStoreProfile.id) {
+            setProfile(dataStoreProfile);
+          }
+        } else if (!profile?.id) {
+          // Only fetch if not in store and not in userStore
           try {
-            const response = await api.get('/profile');
-            const userData = response.data.user || response.data;
-            if (userData?.id) {
-              setProfile(userData);
+            await useDataStore.getState().fetchProfile();
+            const fetchedProfile = useDataStore.getState().profile;
+            if (fetchedProfile?.id) {
+              setProfile(fetchedProfile);
             }
           } catch (profileError) {
             console.warn('Failed to load user profile:', profileError);
@@ -140,19 +147,32 @@ export default function GamesScreen() {
 
   const handleGameStart = useCallback(async (gameType: 'color-match' | 'image-similarity' | 'math-quiz' | 'memory-pattern') => {
     try {
-      // Ensure we have a user profile
-      if (!profile?.id) {
-        try {
-          const resp = await api.get('/profile');
-          const userData = resp.data.user || resp.data;
-          if (userData?.id) setProfile(userData);
-        } catch (e) {
+      // Ensure we have a user profile - ALWAYS check dataStore first (it has the cache)
+      const dataStore = useDataStore.getState();
+      let currentProfile = dataStore.profile;
+      
+      // If dataStore doesn't have profile, fetch it (fetchProfile handles caching internally)
+      if (!currentProfile?.id) {
+        // fetchProfile() will check cache and return early if cache is valid
+        // So we call it and then check the store again
+        await dataStore.fetchProfile();
+        currentProfile = useDataStore.getState().profile;
+        
+        if (!currentProfile?.id) {
           setPopupTitle('❌ Error');
           setCooldownMessage('User not authenticated. Please log in again.');
           setShowCooldownPopup(true);
           return;
         }
       }
+      
+      // Sync to userStore if needed (for backward compatibility)
+      if (!profile?.id || profile.id !== currentProfile.id) {
+        setProfile(currentProfile);
+      }
+      
+      // Use currentProfile for the rest of the function
+      const userId = currentProfile.id;
 
       // Check local cooldown first
       const cooldown = getCooldown(gameType);
@@ -175,7 +195,7 @@ export default function GamesScreen() {
 
       // Backend validation: can-play
       try {
-        await api.post(`/games/${gameId}/can-play`, { user_id: profile?.id });
+        await api.post(`/games/${gameId}/can-play`, { user_id: userId });
       } catch (err: any) {
         const msg = err?.response?.data?.message || 'You cannot play this game right now.';
         setPopupTitle('⏳ Please Wait');
@@ -186,7 +206,7 @@ export default function GamesScreen() {
 
       // Start session
       try {
-        await api.post(`/games/${gameId}/start`, { user_id: profile?.id });
+        await api.post(`/games/${gameId}/start`, { user_id: userId });
       } catch (err: any) {
         const msg = err?.response?.data?.message || 'Failed to start game session.';
         setPopupTitle('❌ Error');
@@ -207,8 +227,12 @@ export default function GamesScreen() {
 
   const refreshUserProfile = useCallback(async () => {
     try {
-      const response = await api.get('/profile');
-      setProfile(response.data.user);
+      // Use dataStore to fetch profile (with caching)
+      await useDataStore.getState().fetchProfile(true); // Force refresh
+      const refreshedProfile = useDataStore.getState().profile;
+      if (refreshedProfile) {
+        setProfile(refreshedProfile);
+      }
     } catch (error) {
       console.error('Failed to refresh user profile:', error);
     }
@@ -233,10 +257,13 @@ export default function GamesScreen() {
           return;
         }
 
-        await api.post(`/games/${gameId}/complete`, {
-          user_id: profile.id,
-          points_earned: points,
+        const response = await api.post(`/games/${gameId}/complete`, {
+          score: points, // Game score for tracking
         });
+
+        // Get actual reward points from backend response (not game score)
+        const actualPointsEarned = response.data.points_earned || 0;
+        const energyEarned = response.data.energy_earned || 0;
 
         // Show interstitial ad after game completion
         try {
@@ -245,9 +272,10 @@ export default function GamesScreen() {
           console.log('Ad not shown:', adError);
         }
 
+        // Only track game stats locally, points are handled by backend
         addPoints(points, activeGame);
         setPopupTitle('🎉 Game Complete');
-        setCooldownMessage(`Great job! You earned ${points} points!`);
+        setCooldownMessage(`Great job! You earned ${actualPointsEarned} reward points and ${energyEarned} energy!`);
         setShowCooldownPopup(true);
 
         await refreshUserProfile();
@@ -325,7 +353,12 @@ export default function GamesScreen() {
         {/* Games Grid */}
         <Text style={styles.sectionLabel}>AVAILABLE GAMES</Text>
         <View style={styles.gamesGrid}>
-          {gameConfigs.filter(game => game.is_active !== false).map((gameConfig) => {
+          {gameConfigs.filter(game => {
+            // Only show mini games (system games), exclude add-on games
+            // Filter by is_system_game flag or check if it's NOT an add-on game
+            const isMiniGame = game.is_system_game === true || (game.is_addon_game !== true && !game.package_name);
+            return game.is_active !== false && isMiniGame;
+          }).map((gameConfig) => {
             const cooldown = getCooldown(gameConfig.slug);
             const isInCooldown = Boolean(cooldown && cooldown.remainingSeconds > 0);
 

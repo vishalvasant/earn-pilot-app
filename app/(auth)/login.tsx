@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { themeColors, typography, spacing, borderRadius } from '../../hooks/useThemeColors';
@@ -48,6 +49,10 @@ export default function LoginScreen() {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     setError('');
+    
+    // Small delay to ensure our overlay is fully rendered before native UI appears
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
     try {
       await googleSignIn();
       // Navigate to home after successful sign-in
@@ -58,9 +63,9 @@ export default function LoginScreen() {
     } catch (err: any) {
       console.error('Sign-in error:', err);
       setError(err.message || 'Failed to sign in. Please try again.');
-    } finally {
       setLoading(false);
     }
+    // Note: Don't set loading to false on success as navigation will unmount the component
   };
 
   return (
@@ -115,7 +120,7 @@ export default function LoginScreen() {
               onPress={handleGoogleSignIn}
               disabled={loading}
               activeOpacity={0.8}
-              style={styles.googleButtonContainer}
+              style={[styles.googleButtonContainer, loading && styles.googleButtonDisabled]}
             >
               <LinearGradient
                 colors={[themeColors.primaryBlue, themeColors.deepBlue]}
@@ -123,11 +128,7 @@ export default function LoginScreen() {
                 end={{ x: 1, y: 1 }}
                 style={styles.googleButtonGradient}
               >
-                {loading ? (
-                  <ActivityIndicator color={themeColors.bgDark} size="small" />
-                ) : (
-                  <Text style={styles.googleButtonText}>Sign in with Google</Text>
-                )}
+                <Text style={styles.googleButtonText}>Sign in with Google</Text>
               </LinearGradient>
             </TouchableOpacity>
 
@@ -147,6 +148,26 @@ export default function LoginScreen() {
           </View>
         </SafeAreaView>
       </KeyboardAvoidingView>
+
+      {/* Loading Overlay - Full screen to cover native Google Sign-In UI */}
+      <Modal
+        visible={loading}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        hardwareAccelerated
+      >
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator 
+              size="large" 
+              color={themeColors.primaryBlue}
+              style={styles.loadingSpinner}
+            />
+            <Text style={styles.loadingText}>One moment please</Text>
+          </View>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -195,6 +216,9 @@ const styles = StyleSheet.create({
   googleButtonContainer: {
     marginVertical: spacing['2xl'],
   },
+  googleButtonDisabled: {
+    opacity: 0.6,
+  },
   googleButtonGradient: {
     paddingVertical: spacing.lg,
     paddingHorizontal: spacing['2xl'],
@@ -230,5 +254,33 @@ const styles = StyleSheet.create({
     color: themeColors.textDim,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  loadingOverlay: {
+    flex: 1,
+    backgroundColor: themeColors.bgDark,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+    elevation: 9999,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing['3xl'],
+    backgroundColor: themeColors.surface,
+    borderRadius: borderRadius.xl,
+    borderWidth: 1,
+    borderColor: themeColors.border,
+    minWidth: 200,
+  },
+  loadingSpinner: {
+    marginBottom: spacing.xl,
+  },
+  loadingText: {
+    fontSize: typography.lg,
+    fontWeight: typography.semibold,
+    color: themeColors.textMain,
+    letterSpacing: 0.5,
+    marginTop: spacing.lg,
   },
 });

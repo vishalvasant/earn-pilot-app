@@ -10,7 +10,7 @@ import {
   StatusBar,
   Animated,
   Modal,
-  Dimensions,
+  Linking,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
@@ -34,6 +34,7 @@ function ProfileScreen() {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [popup, setPopup] = useState<{ visible: boolean; title: string; message: string; onConfirm?: () => void } | null>(null);
   const [supportExpanded, setSupportExpanded] = useState(false);
+  const [privacyExpanded, setPrivacyExpanded] = useState(false);
 
   const styles = useMemo(() => createStyles(theme), [theme]);
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -63,7 +64,8 @@ function ProfileScreen() {
   const handleLogout = async () => {
     try {
       await logout();
-      router.replace('/(auth)/login');
+      // Navigation will automatically switch to Auth stack when isAuthenticated becomes false
+      // No manual navigation needed - the RootStack in App.tsx handles this
     } catch (error) {
       setPopup({ visible: true, title: 'Error', message: 'Failed to logout. Please try again.', onConfirm: () => setPopup(null) });
     }
@@ -91,7 +93,7 @@ function ProfileScreen() {
           </View>
         </Animated.View>
 
-        <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Wallet</Text>
+        {/* <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Wallet</Text>
         <View style={[styles.listItem, styles.listItemAccent, { borderColor: theme.primary, backgroundColor: 'rgba(0, 209, 255, 0.05)' }]}> 
           <Text style={[styles.listItemText, { color: theme.text }]}>Withdrawal Hub</Text>
           <Text style={{ color: theme.primary, fontWeight: '800' }}>REDEEM</Text>
@@ -99,7 +101,7 @@ function ProfileScreen() {
         <View style={[styles.listItem, { borderColor: theme.border, backgroundColor: theme.card }]}> 
           <Text style={[styles.listItemText, { color: theme.text }]}>Reward Statement</Text>
           <Text style={{ color: theme.textSecondary }}>View ❯</Text>
-        </View>
+        </View> */}
 
         <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Security & Preferences</Text>
         <TouchableOpacity style={[styles.listItem, { borderColor: theme.border, backgroundColor: theme.card }]} onPress={() => setPopup({ visible: true, title: 'Change Username', message: 'Editing coming soon.', onConfirm: () => setPopup(null) })}>
@@ -126,11 +128,32 @@ function ProfileScreen() {
         )}
 
         <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Legal</Text>
-        <View style={[styles.listItem, { borderColor: theme.border, backgroundColor: theme.card }]}> 
-          <Text style={[styles.listItemText, { color: theme.text }]}>Privacy Policy</Text>
-        </View>
+        <TouchableOpacity style={[styles.expandableCard, { borderColor: theme.border, backgroundColor: theme.card }]} onPress={() => setPrivacyExpanded(!privacyExpanded)}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={[styles.listItemText, { color: theme.text }]}>Privacy Policy</Text>
+            <Text style={{ color: theme.primary }}>{privacyExpanded ? '▲' : '▼'}</Text>
+          </View>
+        </TouchableOpacity>
+        {privacyExpanded && (
+          <View>
+            <TouchableOpacity 
+              style={[styles.listItem, { borderColor: '#1e293b', backgroundColor: '#0a0e17' }]}
+              onPress={() => Linking.openURL('https://networks11.com/privacy-policy')}
+            > 
+              <Text style={[styles.listItemText, { color: theme.text }]}>Privacy Policy</Text>
+              <Text style={{ color: theme.textSecondary }}>❯</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.listItem, { borderColor: '#1e293b', backgroundColor: '#0a0e17', marginTop: 5 }]}
+              onPress={() => Linking.openURL('https://networks11.com/term-conditions')}
+            > 
+              <Text style={[styles.listItemText, { color: theme.text }]}>Terms & Conditions</Text>
+              <Text style={{ color: theme.textSecondary }}>❯</Text>
+            </TouchableOpacity>
+          </View>
+        )}
         <TouchableOpacity style={[styles.listItem, { borderColor: '#442', marginTop: 20 }]} onPress={() => setShowLogoutModal(true)}>
-          <Text style={{ color: '#ff4444', fontWeight: 'bold' }}>Terminte Session</Text>
+          <Text style={{ color: '#ff4444', fontWeight: 'bold' }}>Logout</Text>
         </TouchableOpacity>
 
         <View style={{ height: 150 }} />

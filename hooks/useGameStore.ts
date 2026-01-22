@@ -23,6 +23,9 @@ interface GameConfig {
   play_cooldown_seconds: number;
   points_per_completion: number;
   is_active?: boolean;
+  is_system_game?: boolean;
+  is_addon_game?: boolean;
+  package_name?: string;
 }
 
 interface GameStore {

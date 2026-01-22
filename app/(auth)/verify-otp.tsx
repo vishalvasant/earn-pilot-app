@@ -1,4 +1,4 @@
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useRoute, useNavigation } from '@react-navigation/native';
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Alert, 
@@ -16,19 +16,21 @@ import {
   Animated,
   Easing
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import LinearGradient from 'react-native-linear-gradient';
 import { useTheme } from '../../hooks/useTheme';
 import { useAuthStore } from '../../stores/authStore';
 import { useUserStore } from '../../stores/userStore';
 import { sendOtp, verifyOtp } from '../../services/api';
-import * as Clipboard from 'expo-clipboard';
-import { Ionicons } from '@expo/vector-icons';
+import Clipboard from '@react-native-clipboard/clipboard';
+import Icon from 'react-native-vector-icons/Ionicons';
 import ErrorToast from '../../components/ErrorToast';
 
 const { width, height } = Dimensions.get('window');
 
 export default function VerifyOtpScreen() {
-  const { phone: paramPhone } = useLocalSearchParams<{ phone?: string }>();
+  const route = useRoute<any>();
+  const navigation = useNavigation();
+  const { phone: paramPhone } = route.params || {};
   const [phone, setPhone] = useState(paramPhone || '');
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [name, setName] = useState('');
@@ -38,7 +40,6 @@ export default function VerifyOtpScreen() {
   const [isNewUser, setIsNewUser] = useState<boolean | null>(null);
   const [verificationAttempted, setVerificationAttempted] = useState(false);
   const [errorToast, setErrorToast] = useState<{ visible: boolean; message: string }>({ visible: false, message: '' });
-  const router = useRouter();
   const setAuth = useAuthStore((s) => s.setAuth);
   const setProfile = useUserStore((s) => s.setProfile);
   const theme = useTheme();
@@ -55,10 +56,10 @@ export default function VerifyOtpScreen() {
     const clearAndCheckClipboard = async () => {
       try {
         // Always clear clipboard first
-        await Clipboard.setStringAsync('');
+        Clipboard.setString('');
         // Then check clipboard after a short delay (in case user pastes quickly)
         setTimeout(async () => {
-          const text = await Clipboard.getStringAsync();
+          const text = await Clipboard.getString();
           const otpMatch = text.match(/\b\d{6}\b/);
           if (otpMatch) {
             const otpDigits = otpMatch[0].split('');
@@ -78,7 +79,7 @@ export default function VerifyOtpScreen() {
               ]).start();
             });
             // Clear clipboard after auto-fill
-            await Clipboard.setStringAsync('');
+            Clipboard.setString('');
           }
         }, 1000);
       } catch (error) {
@@ -165,7 +166,7 @@ export default function VerifyOtpScreen() {
           user: response.user
         });
         setProfile(response.user);
-        router.replace('/(tabs)/home');
+        navigation.navigate('MainApp', { screen: 'Home' });
         
       } catch (error: any) {
         console.error('First verification attempt:', error);
@@ -375,8 +376,8 @@ export default function VerifyOtpScreen() {
                 onPress={async () => {
                   try {
                     // Always clear clipboard before paste
-                    await Clipboard.setStringAsync('');
-                    const text = await Clipboard.getStringAsync();
+                    Clipboard.setString('');
+                    const text = await Clipboard.getString();
                     const otpMatch = text.match(/\b\d{6}\b/);
                     if (otpMatch) {
                       const otpDigits = otpMatch[0].split('');
@@ -397,7 +398,7 @@ export default function VerifyOtpScreen() {
                         ]).start();
                       });
                       // Clear clipboard after manual paste
-                      await Clipboard.setStringAsync('');
+                      Clipboard.setString('');
                     } else {
                       showErrorToast('No 6-digit code found in clipboard');
                     }
@@ -408,7 +409,7 @@ export default function VerifyOtpScreen() {
                 style={styles.pasteButton}
               >
                 <View style={styles.pasteButtonContent}>
-                  <Ionicons name="chatbox-outline" size={18} color={theme.primary} />
+                  <Icon name="chatbox-outline" size={18} color={theme.primary} />
                   <Text style={[styles.pasteButtonText, { color: theme.primary }]}>
                     Get OTP from Messages
                   </Text>

@@ -40,13 +40,8 @@ export default {
     favicon: './assets/images/NewPilot.png'
   },
   plugins: [
-    'expo-router',
-    [
-      'expo-screen-orientation',
-      {
-        initialOrientation: 'PORTRAIT'
-      }
-    ],
+    // Removed expo-router and expo-screen-orientation as we're using React Navigation
+    // Orientation locking should be handled in App.tsx or using react-native-orientation-locker
     [
       'react-native-google-mobile-ads',
       {
@@ -72,8 +67,8 @@ export default {
   },
   extra: {
     // Dynamically set API URL based on environment or default to localhost
-    // Local API (Active)
-    // API_BASE_URL: "http://192.168.31.206:8000",
+    // Production API URL
+    API_BASE_URL: "https://networks11.com",
     eas: {
       projectId: "156da554-3870-41b3-9a68-2191a71f936d"
     },
@@ -84,9 +79,8 @@ export default {
     },
     GOOGLE_CLIENT_ID: "731854608021-212j32uld6l6cgrjoce8l2f9mp7q72vg.apps.googleusercontent.com",
     APP_IDENTIFIER: "earn-pilot",
-    // For production:
-    API_BASE_URL: "https://networks11.com",
-    // For local development (LAN):
-    // API_BASE_URL: "http://192.168.31.25:8000", // Real device
+    // For local development (uncomment when needed):
+    // API_BASE_URL: "http://10.0.2.2:8000", // Android emulator
+    // API_BASE_URL: "http://192.168.31.25:8000", // Real device on LAN
   },
 };
