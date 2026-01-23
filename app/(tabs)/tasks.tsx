@@ -87,7 +87,10 @@ export default function TasksScreen() {
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: shouldShowBanner ? 100 : 24 }}
+        contentContainerStyle={[
+          styles.scrollViewContent,
+          { paddingBottom: shouldShowBanner ? 100 : 24 }
+        ]}
       >
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
           {/* Header */}
@@ -403,13 +406,19 @@ export default function TasksScreen() {
 const createStyles = (theme: any) => StyleSheet.create({
   container: { flex: 1 },
   scrollView: { flex: 1 },
+  scrollViewContent: {
+    paddingTop: 0,
+  },
   topHeader: {
     paddingHorizontal: 20,
-    paddingTop: 35,
-    paddingBottom: 24,
+    paddingTop: 50,
+    paddingBottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   logoText: { 
-    fontSize: 28, 
+    fontSize: 24, 
     fontWeight: '800', 
     letterSpacing: -0.5, 
     color: theme.text,

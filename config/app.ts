@@ -1,6 +1,6 @@
 export const APP_CONFIG = {
-  API_BASE_URL: 'http://192.168.31.206:8000', // Local server for testing
-  // API_BASE_URL: 'https://networks11.com', // Production server (uncomment when deploying)
+  // API_BASE_URL: 'http://192.168.31.206:8000', // Local server for testing
+  API_BASE_URL: 'https://networks11.com', // Production server (uncomment when deploying)
   APP_IDENTIFIER: 'earn-pilot',
   FIREBASE_API_KEY: 'AIzaSyDJcurdZwgTu3J4VWQLBf8OOdvgmIF5uro',
   FIREBASE_AUTH_DOMAIN: 'earn-pilot-app.firebaseapp.com',

@@ -21,10 +21,11 @@ import { useUserStore } from '../../stores/userStore';
 import { useGameStore } from '../../hooks/useGameStore';
 import { useGameCooldowns } from '../../hooks/useGameCooldowns';
 import { useDataStore } from '../../stores/dataStore';
-import { typography, spacing, borderRadius } from '../../hooks/useThemeColors';
+import { typography, spacing, borderRadius, themeColors } from '../../hooks/useThemeColors';
 import Icon from '../../components/Icon';
 import { useAdMob } from '../../hooks/useAdMob';
 import { getDashboardDetails } from '../../services/dashboard';
+import { getHeroSlides, HeroSlide } from '../../services/heroSlides';
 import ColorMatchGame from '../../components/games/ColorMatchGame';
 import ImageSimilarityGame from '../../components/games/ImageSimilarityGame';
 import MathQuizGame from '../../components/games/MathQuizGame';
@@ -34,6 +35,8 @@ import { useAuthStore } from '../../stores/authStore';
 import { requestNotificationPermission, getFCMToken, registerDeviceToken, setupMessageHandlers } from '../../services/fcm';
 import FixedBannerAd from '../../components/FixedBannerAd';
 import { UnityLauncherService } from '../../services/unityLauncher';
+import { APP_CONFIG } from '../../config/app';
+import { Linking } from 'react-native';
 
 const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
 
@@ -84,6 +87,9 @@ export default function HomeScreen() {
   const [dashboard, setDashboard] = useState<any>(null);
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [greeting, setGreeting] = useState(getGreeting());
+  const [heroSlides, setHeroSlides] = useState<HeroSlide[]>([]);
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const slideScrollRef = useRef<ScrollView>(null);
   
   // Use centralized data store
   const { 
@@ -137,6 +143,14 @@ export default function HomeScreen() {
           // All initial data (tasks, quizzes, profile) - uses centralized store
           fetchAllInitialData().catch(err => {
             console.warn('Initial data fetch error:', err);
+          }),
+          
+          // Hero slides
+          getHeroSlides().then(slides => {
+            setHeroSlides(slides);
+          }).catch(err => {
+            console.warn('Hero slides fetch error:', err);
+            setHeroSlides([]);
           }),
         ]);
         
@@ -413,30 +427,6 @@ export default function HomeScreen() {
         backgroundColor={theme.background} 
       />
 
-      {/* Fixed Header */}
-      <Animated.View
-        style={[
-          styles.fixedHeader,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-            backgroundColor: theme.background,
-            borderBottomColor: theme.border,
-          },
-        ]}
-      >
-        <View style={styles.headerContent}>
-          <Text style={[styles.logo, { color: theme.text }]}>
-            Earn<Text style={[styles.logoPilot, { color: theme.primary }]}>Pilot</Text>
-          </Text>
-          <Text style={[styles.greeting, { color: theme.textSecondary }]}>{greeting}</Text>
-        </View>
-        <View style={[styles.walletPill, { backgroundColor: theme.card, borderColor: theme.border }]}>
-          <Text style={[styles.walletText, { color: theme.primary }]}>💎 {dashboard?.total_earned ?? '0'}</Text>
-          <Text style={[styles.energyText, { color: theme.textSecondary }]}>⚡ {dashboard?.energy_points ?? '0'} Energy</Text>
-        </View>
-      </Animated.View>
-
       <ScrollView
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={16}
@@ -446,17 +436,93 @@ export default function HomeScreen() {
           shouldShowBanner ? { paddingBottom: 100 } : null,
         ]}
       >
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+          {/* Header */}
+          <View style={styles.topHeader}>
+            <Text style={[styles.logoText, { color: theme.text }]}>EARN<Text style={{ color: theme.primary }}>PILOT</Text></Text>
+            <View style={[styles.walletPill, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <Text style={[styles.walletText, { color: theme.primary }]}>💎 {dashboard?.total_earned ?? '0'}</Text>
+              <Text style={[styles.energyText, { color: theme.textSecondary }]}>⚡ {dashboard?.energy_points ?? '0'} Energy</Text>
+            </View>
+          </View>
 
-        {/* Banner - Smart Yield */}
-        <LinearGradient
-          colors={[theme.primary, theme.primary + 'CC']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.banner}
-        >
-          <Text style={styles.bannerTitle}>Smart Yield</Text>
-          <Text style={styles.bannerSubtitle}>Your 1.5x Multiplier is currently Active</Text>
-        </LinearGradient>
+          {/* Hero Slider */}
+          {heroSlides.length > 0 ? (
+            <View style={styles.heroSliderContainer}>
+              <ScrollView
+                ref={slideScrollRef}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onMomentumScrollEnd={(event) => {
+                  const slideIndex = Math.round(event.nativeEvent.contentOffset.x / screenWidth);
+                  setCurrentSlideIndex(slideIndex);
+                }}
+                style={styles.heroSlider}
+              >
+                {heroSlides.map((slide, index) => (
+                  <TouchableOpacity
+                    key={slide.id}
+                    activeOpacity={0.9}
+                    onPress={() => {
+                      if (slide.link_url) {
+                        Linking.openURL(slide.link_url).catch(err => console.error('Failed to open URL:', err));
+                      }
+                    }}
+                    style={styles.slideContainer}
+                  >
+                    <Image
+                      source={{ uri: slide.image_url }}
+                      style={styles.slideImage}
+                      resizeMode="cover"
+                      onError={(error) => {
+                        console.error('Hero slide image load error:', error.nativeEvent.error, 'URL:', slide.image_url);
+                      }}
+                    />
+                    {(slide.title || slide.subtitle) && (
+                      <LinearGradient
+                        colors={['transparent', 'rgba(0,0,0,0.7)']}
+                        style={styles.slideOverlay}
+                      >
+                        {slide.title && (
+                          <Text style={styles.slideTitle}>{slide.title}</Text>
+                        )}
+                        {slide.subtitle && (
+                          <Text style={styles.slideSubtitle}>{slide.subtitle}</Text>
+                        )}
+                      </LinearGradient>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              
+              {/* Pagination Dots */}
+              {heroSlides.length > 1 && (
+                <View style={styles.paginationContainer}>
+                  {heroSlides.map((_, index) => (
+                    <View
+                      key={index}
+                      style={[
+                        styles.paginationDot,
+                        index === currentSlideIndex && styles.paginationDotActive,
+                      ]}
+                    />
+                  ))}
+                </View>
+              )}
+            </View>
+          ) : (
+            // Fallback to old banner if no slides
+            <LinearGradient
+              colors={[theme.primary, theme.primary + 'CC']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.banner}
+            >
+              <Text style={styles.bannerTitle}>Smart Yield</Text>
+              <Text style={styles.bannerSubtitle}>Your 1.5x Multiplier is currently Active</Text>
+            </LinearGradient>
+          )}
 
         {/* Banner Ad above Add-On Games */}
         {shouldShowBanner && (() => {
@@ -539,7 +605,7 @@ export default function HomeScreen() {
               <Image 
                 source={game.image} 
                 style={styles.addOnGameImage}
-                resizeMode="contain"
+                resizeMode="cover"
               />
               <Text style={[styles.addOnGameName, { color: theme.text }]}>{game.name}</Text>
               <Text style={[styles.playLabel, { color: theme.primary }]}>Play Now</Text>
@@ -661,6 +727,7 @@ export default function HomeScreen() {
 
         {/* Bottom spacing for fixed banner ad + tab bar */}
         <View style={{ height: 150 }} />
+        </Animated.View>
       </ScrollView>
 
       {/* Cooldown Popup */}
@@ -690,37 +757,20 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   scrollViewContent: {
-    paddingTop: 100,
+    paddingTop: 0,
   },
-  fixedHeader: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 100,
+  topHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 50,
+    paddingBottom: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.lg,
-    paddingTop: spacing['2xl'],
-    borderBottomWidth: 1,
   },
-  headerContent: {
-    flex: 1,
-  },
-  logo: {
-    fontSize: typography['2xl'],
+  logoText: {
+    fontSize: 24,
     fontWeight: '800',
     letterSpacing: -0.5,
-  },
-  logoPilot: {
-    fontWeight: '800',
-  },
-  greeting: {
-    fontSize: typography.sm,
-    marginTop: spacing.xs,
-    fontWeight: '600',
   },
   walletPill: {
     borderRadius: borderRadius.full,
@@ -738,8 +788,9 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   banner: {
-    marginHorizontal: spacing.xl,
-    marginVertical: spacing.lg,
+    marginHorizontal: 20,
+    marginTop: spacing.lg,
+    marginBottom: spacing.lg,
     borderRadius: borderRadius.xl,
     padding: spacing.xl,
     shadowOffset: { width: 0, height: 4 },
@@ -785,7 +836,7 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: typography.xs,
     fontWeight: '800',
-    marginHorizontal: spacing.xl,
+    marginHorizontal: 20,
     marginTop: spacing.lg,
     marginBottom: spacing.md,
     textTransform: 'uppercase',
@@ -910,6 +961,7 @@ const styles = StyleSheet.create({
   addOnGameImage: {
     width: 60,
     height: 60,
+    borderRadius: 30,
   },
   addOnGameName: {
     fontSize: typography.base,
@@ -987,5 +1039,60 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 50,
+  },
+  heroSliderContainer: {
+    marginHorizontal: 20,
+    marginTop: spacing.lg,
+    marginBottom: spacing.lg,
+    borderRadius: borderRadius.xl,
+    overflow: 'hidden',
+  },
+  heroSlider: {
+    height: 200,
+  },
+  slideContainer: {
+    width: screenWidth - 40,
+    height: 200,
+    position: 'relative',
+  },
+  slideImage: {
+    width: '100%',
+    height: '100%',
+  },
+  slideOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: spacing.xl,
+    paddingTop: spacing['2xl'],
+  },
+  slideTitle: {
+    fontSize: typography['2xl'],
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginBottom: spacing.xs,
+  },
+  slideSubtitle: {
+    fontSize: typography.base,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.9)',
+  },
+  paginationContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    gap: spacing.xs,
+  },
+  paginationDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  paginationDotActive: {
+    backgroundColor: themeColors.primaryBlue,
+    width: 24,
   },
 });

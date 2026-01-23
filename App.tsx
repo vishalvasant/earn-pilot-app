@@ -24,6 +24,7 @@ import TasksScreen from './app/(tabs)/tasks';
 import GamesScreen from './app/(tabs)/games';
 import WalletScreen from './app/(tabs)/wallet';
 import ProfileScreen from './app/(tabs)/profile';
+import RewardsScreen from './app/(tabs)/rewards';
 import TaskDetailScreen from './app/task-detail';
 import QuizzesScreen from './app/quizzes';
 
@@ -123,6 +124,17 @@ const TabNavigator = () => {
           ),
         }}
       />
+      <Tab.Screen
+        name="Rewards"
+        component={RewardsScreen}
+        options={{
+          title: 'Rewards',
+          tabBarLabel: 'Rewards',
+          tabBarIcon: ({ focused }) => (
+            <Text style={{ fontSize: 20 }}>{focused ? '🎁' : '🎁'}</Text>
+          ),
+        }}
+      />
       {/* <Tab.Screen
         name="Games"
         component={GamesScreen}
@@ -166,6 +178,9 @@ const RootStack = () => {
 
   useEffect(() => {
     const bootstrapAsync = async () => {
+      const startTime = Date.now();
+      const MIN_SPLASH_DURATION = 2500; // 2.5 seconds minimum
+      
       try {
         // Configure GoogleSignin for Firebase
         GoogleSignin.configure({
@@ -182,7 +197,17 @@ const RootStack = () => {
       } catch (e) {
         console.error('Failed to restore token:', e);
       } finally {
-        setIsLoading(false);
+        // Ensure splash screen stays visible for at least 2.5 seconds
+        const elapsedTime = Date.now() - startTime;
+        const remainingTime = Math.max(0, MIN_SPLASH_DURATION - elapsedTime);
+        
+        if (remainingTime > 0) {
+          setTimeout(() => {
+            setIsLoading(false);
+          }, remainingTime);
+        } else {
+          setIsLoading(false);
+        }
       }
     };
 

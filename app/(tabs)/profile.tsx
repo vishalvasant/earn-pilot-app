@@ -78,7 +78,10 @@ function ProfileScreen() {
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: shouldShowBanner ? 100 : 20 }}
+        contentContainerStyle={[
+          styles.scrollViewContent,
+          { paddingBottom: shouldShowBanner ? 100 : 20 }
+        ]}
       >
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
           <View style={styles.topHeader}>
@@ -200,16 +203,19 @@ const createStyles = (theme: any) => StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+  scrollViewContent: {
+    paddingTop: 0,
+  },
   topHeader: {
     paddingHorizontal: 20,
-    paddingTop: 35,
-    paddingBottom: 15,
+    paddingTop: 50,
+    paddingBottom: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   logoText: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '800',
     letterSpacing: -0.5,
     color: theme.text,

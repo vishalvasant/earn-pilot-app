@@ -279,6 +279,7 @@ export default function WalletScreen() {
       <ScrollView 
         style={styles.scrollView} 
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollViewContent}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
@@ -293,7 +294,7 @@ export default function WalletScreen() {
           ]}
         >
           <View style={styles.topHeader}>
-            <Text style={[styles.logoText, { color: theme.text }]}>WALLET</Text>
+            <Text style={styles.logoText}>MY<Text style={{ color: theme.primary }}>WALLET</Text></Text>
           </View>
 
           {/* Balance Card */}
@@ -604,15 +605,22 @@ const createStyles = (theme: any) => StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+  scrollViewContent: {
+    paddingTop: 0,
+  },
   topHeader: {
     paddingHorizontal: 20,
-    paddingTop: 35,
+    paddingTop: 50,
     paddingBottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   logoText: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '800',
     letterSpacing: -0.5,
+    color: theme.text,
   },
   balanceCard: {
     marginHorizontal: 20,

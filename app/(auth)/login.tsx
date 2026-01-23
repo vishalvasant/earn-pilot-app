@@ -27,6 +27,7 @@ export default function LoginScreen() {
   const { googleSignIn } = useAuthStore();
 
   const logoPulse = useRef(new Animated.Value(1)).current;
+  const progressBarWidth = useRef(new Animated.Value(0)).current;
 
   // Animated pulse for logo
   useEffect(() => {
@@ -45,6 +46,31 @@ export default function LoginScreen() {
       ])
     ).start();
   }, []);
+
+  // Animated progress bar
+  useEffect(() => {
+    if (loading) {
+      // Reset and start animation
+      progressBarWidth.setValue(0);
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(progressBarWidth, {
+            toValue: 1,
+            duration: 1500,
+            useNativeDriver: false,
+          }),
+          Animated.timing(progressBarWidth, {
+            toValue: 0,
+            duration: 0,
+            useNativeDriver: false,
+          }),
+        ])
+      ).start();
+    } else {
+      // Stop animation
+      progressBarWidth.setValue(0);
+    }
+  }, [loading]);
 
   const handleGoogleSignIn = async () => {
     setLoading(true);
@@ -164,7 +190,21 @@ export default function LoginScreen() {
               color={themeColors.primaryBlue}
               style={styles.loadingSpinner}
             />
-            <Text style={styles.loadingText}>One moment please</Text>
+            <Text style={styles.loadingText}>Loading</Text>
+            {/* Progress Bar */}
+            <View style={styles.progressBarContainer}>
+              <Animated.View
+                style={[
+                  styles.progressBar,
+                  {
+                    width: progressBarWidth.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: ['0%', '100%'],
+                    }),
+                  },
+                ]}
+              />
+            </View>
           </View>
         </View>
       </Modal>
@@ -282,5 +322,19 @@ const styles = StyleSheet.create({
     color: themeColors.textMain,
     letterSpacing: 0.5,
     marginTop: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  progressBarContainer: {
+    width: '100%',
+    height: 4,
+    backgroundColor: 'rgba(0, 209, 255, 0.1)',
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginTop: spacing.md,
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: themeColors.primaryBlue,
+    borderRadius: 2,
   },
 });
