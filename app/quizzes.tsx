@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -8,42 +8,41 @@ import {
   StyleSheet,
   StatusBar,
   ActivityIndicator,
+  Image,
+  Dimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import LinearGradient from 'react-native-linear-gradient';
 import { useTheme } from '../hooks/useTheme';
 import { api } from '../services/api';
-import { spacing, typography, borderRadius } from '../hooks/useThemeColors';
+
+const { width: screenWidth } = Dimensions.get('window');
 
 export default function QuizzesScreen() {
   const navigation = useNavigation<any>();
   const theme = useTheme();
-  const [allQuizzes, setAllQuizzes] = useState<any[]>([]);
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   const [loading, setLoading] = useState(true);
-  const [quizzesByCategory, setQuizzesByCategory] = useState<{ [key: string]: any[] }>({});
+  const [mode, setMode] = useState<'categories' | 'quizzes'>('categories');
+
+  const [categories, setCategories] = useState<any[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<any | null>(null);
+
+  const [categoryQuizzes, setCategoryQuizzes] = useState<any[]>([]);
 
   useEffect(() => {
-    fetchQuizzes();
+    fetchCategories();
   }, []);
 
-  const fetchQuizzes = async () => {
+  const fetchCategories = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/quizzes');
-      const quizzes = response?.data?.data || [];
-      setAllQuizzes(quizzes);
-
-      // Group quizzes by category
-      const grouped: { [key: string]: any[] } = {};
-      quizzes.forEach((quiz: any) => {
-        const category = quiz.category || quiz.quiz_category?.name || 'Uncategorized';
-        if (!grouped[category]) {
-          grouped[category] = [];
-        }
-        grouped[category].push(quiz);
-      });
-
-      setQuizzesByCategory(grouped);
+      const response = await api.get('/quiz-categories');
+      const rows = response?.data?.data || [];
+      setCategories(rows);
+      setMode('categories');
+      setSelectedCategory(null);
+      setCategoryQuizzes([]);
     } catch (error) {
       console.log('Error fetching quizzes:', error);
     } finally {
@@ -51,25 +50,40 @@ export default function QuizzesScreen() {
     }
   };
 
-  const handleQuizPress = (quizId: number) => {
-    // Navigate to quiz-play screen (will be created)
-    navigation.navigate('QuizPlay', { id: quizId });
+  const fetchQuizzesForCategory = async (category: any) => {
+    try {
+      setLoading(true);
+      const response = await api.get(`/quiz-categories/${category.id}/quizzes`);
+      const payload = response?.data?.data || {};
+      const quizzes = payload?.quizzes || [];
+      setSelectedCategory(payload?.category || category);
+      setCategoryQuizzes(quizzes);
+      setMode('quizzes');
+    } catch (error) {
+      console.log('Error fetching category quizzes:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const styles = createStyles(theme);
+  const handleQuizPress = (quizId: number) => {
+    navigation.navigate('QuizPlay', { id: quizId });
+  };
 
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={[styles.loadingText, { color: theme.text }]}>Loading quizzes...</Text>
+          <Text style={[styles.loadingText, { color: theme.text }]}>
+            {mode === 'categories' ? 'Loading categories...' : 'Loading quizzes...'}
+          </Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  if (allQuizzes.length === 0) {
+  if (mode === 'categories' && categories.length === 0) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
         <View style={styles.topHeader}>
@@ -83,8 +97,10 @@ export default function QuizzesScreen() {
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.errorContainer}>
-          <Text style={[styles.errorText, { color: theme.text }]}>No Quizzes Available</Text>
-          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>Check back soon for new quizzes!</Text>
+          <Text style={[styles.errorText, { color: theme.text }]}>No Categories Available</Text>
+          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+            Ask admin to create a quiz category and add quizzes.
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -102,34 +118,92 @@ export default function QuizzesScreen() {
         <View style={styles.topHeader}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => {
+              if (mode === 'quizzes') {
+                setMode('categories');
+                setSelectedCategory(null);
+                setCategoryQuizzes([]);
+                return;
+              }
+              navigation.goBack();
+            }}
           >
             <Text style={{ fontSize: 24, color: theme.text }}>‹</Text>
           </TouchableOpacity>
-          <Text style={[styles.headerTitle, { color: theme.text }]}>Brain Teaser Quiz</Text>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>
+            {mode === 'categories' ? 'Quiz Categories' : (selectedCategory?.name || 'Quizzes')}
+          </Text>
           <View style={{ width: 40 }} />
         </View>
 
-        {/* Render quizzes grouped by category */}
-        {Object.entries(quizzesByCategory).map(([category, quizzes]) => (
-          <View key={category} style={{ paddingHorizontal: 20, marginBottom: 30 }}>
-            {/* Category Header */}
-            <Text style={[styles.sectionLabel, { color: theme.textSecondary, marginBottom: 15 }]}>
-              {category.toUpperCase()}
-            </Text>
+        {mode === 'categories' ? (
+          <View style={styles.categoriesGrid}>
+            {categories.map((c) => (
+              <TouchableOpacity
+                key={c.id}
+                style={[
+                  styles.categoryCard,
+                  { backgroundColor: theme.card, borderColor: theme.border }
+                ]}
+                onPress={() => fetchQuizzesForCategory(c)}
+                activeOpacity={0.85}
+              >
+                {/* Top-right badge: quiz count only */}
+                <View style={[styles.categoryBadge, { backgroundColor: theme.primary }]}>
+                  <Text style={styles.categoryBadgeText}>{c.quiz_count || 0}</Text>
+                </View>
 
-            {/* Quiz Cards for this category */}
-            <View style={{ gap: 12 }}>
-              {quizzes.map((quiz, index) => (
+                <View style={styles.categoryInner}>
+                  <View style={styles.categoryIconWrapper}>
+                    {c.icon_url ? (
+                      <Image
+                        source={{ uri: c.icon_url }}
+                        style={styles.categoryIcon}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View
+                        style={[
+                          styles.categoryFallbackIcon,
+                          { backgroundColor: c.color || theme.primary },
+                        ]}
+                      >
+                        <Text style={{ color: '#fff', fontSize: 18 }}>🧠</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text
+                    style={[styles.categoryTitle, { color: theme.text }]}
+                    numberOfLines={1}
+                  >
+                    {c.name || 'Category'}
+                  </Text>
+                  {c.description ? (
+                    <Text
+                      style={[styles.categoryDesc, { color: theme.textSecondary }]}
+                      numberOfLines={2}
+                    >
+                      {c.description}
+                    </Text>
+                  ) : null}
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : (
+          <View style={{ paddingHorizontal: 20, paddingBottom: 30, gap: 12 }}>
+            {categoryQuizzes.length === 0 ? (
+              <View style={styles.errorContainer}>
+                <Text style={[styles.errorText, { color: theme.text }]}>No Quizzes Available</Text>
+                <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+                  Admin needs to create a quiz in this category.
+                </Text>
+              </View>
+            ) : (
+              categoryQuizzes.map((quiz, index) => (
                 <TouchableOpacity
                   key={quiz.id}
-                  style={[
-                    styles.quizItem,
-                    {
-                      backgroundColor: theme.card,
-                      borderColor: theme.border
-                    }
-                  ]}
+                  style={[styles.quizItem, { backgroundColor: theme.card, borderColor: theme.border }]}
                   onPress={() => handleQuizPress(quiz.id)}
                   activeOpacity={0.7}
                 >
@@ -139,47 +213,36 @@ export default function QuizzesScreen() {
                     </View>
 
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.quizTitle, { color: theme.text }]}>
-                        {quiz.title || quiz.category || 'Untitled Quiz'}
-                      </Text>
-                      {quiz.description && (
+                      <Text style={[styles.quizTitle, { color: theme.text }]}>{quiz.title || 'Untitled Quiz'}</Text>
+                      {quiz.description ? (
                         <Text style={[styles.quizDesc, { color: theme.textSecondary }]} numberOfLines={2}>
                           {quiz.description}
                         </Text>
-                      )}
-                      
-                      {/* Stats Row */}
+                      ) : null}
+
                       <View style={{ flexDirection: 'row', gap: 12, marginTop: 8 }}>
-                        {quiz.question_count && (
-                          <Text style={[styles.quizMeta, { color: theme.textSecondary }]}>
-                            📋 {quiz.question_count} Q's
-                          </Text>
-                        )}
-                        {quiz.difficulty && (
-                          <Text style={[styles.quizMeta, { color: theme.textSecondary }]}>
-                            ⭐ {quiz.difficulty}
-                          </Text>
-                        )}
-                        {quiz.passing_percentage && (
-                          <Text style={[styles.quizMeta, { color: theme.textSecondary }]}>
-                            {quiz.passing_percentage}% Pass
-                          </Text>
-                        )}
+                        <Text style={[styles.quizMeta, { color: theme.textSecondary }]}>
+                          📋 {quiz.question_count || 0} Q's
+                        </Text>
+                        {quiz.difficulty ? (
+                          <Text style={[styles.quizMeta, { color: theme.textSecondary }]}>⭐ {quiz.difficulty}</Text>
+                        ) : null}
+                        {quiz.passing_percentage ? (
+                          <Text style={[styles.quizMeta, { color: theme.textSecondary }]}>{quiz.passing_percentage}% Pass</Text>
+                        ) : null}
                       </View>
                     </View>
                   </View>
 
                   <View style={{ alignItems: 'flex-end', justifyContent: 'space-between', gap: 8 }}>
-                    <Text style={[styles.quizPoints, { color: theme.primary }]}>
-                      +{quiz.reward_points || 50}
-                    </Text>
+                    <Text style={[styles.quizPoints, { color: theme.primary }]}>+{quiz.reward_points || 0}</Text>
                     <Text style={{ color: theme.primary, fontSize: 12, fontWeight: '600' }}>Play →</Text>
                   </View>
                 </TouchableOpacity>
-              ))}
-            </View>
+              ))
+            )}
           </View>
-        ))}
+        )}
 
         <View style={{ height: 60 }} />
       </ScrollView>
@@ -242,11 +305,86 @@ const createStyles = (theme: any) => StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
   },
-  sectionLabel: {
-    fontSize: 11,
+  categoriesGrid: {
+    paddingHorizontal: 20,
+    paddingBottom: 30,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 14,
+  },
+  categoryCard: {
+    width: (screenWidth - 20 * 2 - 12) / 2,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 16,
+    position: 'relative',
+    // Soft glow shadow similar to other cards
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  categoryInner: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  categoryIconWrapper: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    overflow: 'hidden',
+    marginBottom: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categoryIcon: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 32,
+  },
+  categoryFallbackIcon: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categoryTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  categoryDesc: {
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  categoryMeta: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  categoryBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  categoryBadgeText: {
+    fontSize: 16,
     fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 2,
+    color: '#ffffff',
+    textAlign: 'center',
   },
   quizItem: {
     borderRadius: 18,

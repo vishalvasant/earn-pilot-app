@@ -20,6 +20,9 @@ console.log('🔗 API Base URL:', resolvedBaseURL);
 
 export const api = axios.create({ baseURL: `${resolvedBaseURL}/api` });
 
+/** Base URL for assets (icons, storage) – same host as API, no /api suffix */
+export const getAssetBaseUrl = (): string => resolvedBaseURL;
+
 api.interceptors.request.use(async (config) => {
   const token = useAuthStore.getState().token;
   if (token) {

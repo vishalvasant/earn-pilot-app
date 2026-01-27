@@ -24,9 +24,9 @@ import TasksScreen from './app/(tabs)/tasks';
 import GamesScreen from './app/(tabs)/games';
 import WalletScreen from './app/(tabs)/wallet';
 import ProfileScreen from './app/(tabs)/profile';
-import RewardsScreen from './app/(tabs)/rewards';
 import TaskDetailScreen from './app/task-detail';
 import QuizzesScreen from './app/quizzes';
+import QuizPlayScreen from './app/quiz-play';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -61,6 +61,11 @@ const MainStack = () => {
         name="quizzes" 
         component={QuizzesScreen}
         options={{ animation: 'slide_from_right', title: 'Brain Teaser Quiz' }}
+      />
+      <Stack.Screen
+        name="QuizPlay"
+        component={QuizPlayScreen}
+        options={{ animation: 'slide_from_right', title: 'Quiz' }}
       />
     </Stack.Navigator>
   );
@@ -121,17 +126,6 @@ const TabNavigator = () => {
           tabBarLabel: 'Tasks',
           tabBarIcon: ({ focused }) => (
             <Text style={{ fontSize: 20 }}>{focused ? '⚡' : '⚡'}</Text>
-          ),
-        }}
-      />
-      <Tab.Screen
-        name="Rewards"
-        component={RewardsScreen}
-        options={{
-          title: 'Rewards',
-          tabBarLabel: 'Rewards',
-          tabBarIcon: ({ focused }) => (
-            <Text style={{ fontSize: 20 }}>{focused ? '🎁' : '🎁'}</Text>
           ),
         }}
       />

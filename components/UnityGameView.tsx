@@ -3,6 +3,7 @@ import { View, Alert, ActivityIndicator, StyleSheet, Text, TouchableOpacity } fr
 import { WebView } from 'react-native-webview';
 import { useAuthStore } from '../stores/authStore';
 import { useUserStore } from '../stores/userStore';
+import { APP_CONFIG } from '../config/app';
 
 interface UnityGameViewProps {
   gameId: number;
@@ -36,7 +37,7 @@ export function UnityGameView({
       window.unityAuthToken = "${token}";
       window.unityUserId = ${profile?.id || 0};
       window.unityGameId = ${gameId};
-      window.unityApiBaseUrl = "http://127.0.0.1:8000/api";
+      window.unityApiBaseUrl = "${APP_CONFIG.API_BASE_URL.replace('localhost', '10.0.2.2').replace('127.0.0.1', '10.0.2.2')}/api";
       
       console.log('[EarnPilot] Unity configuration injected:', {
         userId: window.unityUserId,

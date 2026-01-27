@@ -13,14 +13,14 @@ interface Task {
   [key: string]: any;
 }
 
-interface Quiz {
+// NOTE: this is now "quiz categories" for the category-first quiz flow
+interface QuizCategory {
   id: number;
-  category?: string;
-  title?: string;
+  name?: string;
   description?: string;
-  question_count?: number;
-  difficulty?: string;
-  reward_points?: number;
+  color?: string;
+  icon_url?: string | null;
+  quiz_count?: number;
   [key: string]: any;
 }
 
@@ -33,7 +33,7 @@ interface DataState {
   tasksError: string | null;
   
   // Quizzes
-  quizzes: Quiz[];
+  quizzes: QuizCategory[];
   quizzesLoading: boolean;
   quizzesLastFetched: number | null;
   quizzesError: string | null;
@@ -157,7 +157,8 @@ export const useDataStore = create<DataState>((set, get) => ({
     set({ quizzesLoading: true, quizzesError: null });
     
     try {
-      const response = await api.get('/quizzes');
+      // Category-first quiz flow: fetch categories (Home uses this for "X available")
+      const response = await api.get('/quiz-categories');
       const quizzes = response.data.data || [];
       
       set({
@@ -167,7 +168,7 @@ export const useDataStore = create<DataState>((set, get) => ({
         quizzesError: null,
       });
       
-      console.log('✅ Quizzes fetched successfully:', quizzes.length);
+      console.log('✅ Quiz categories fetched successfully:', quizzes.length);
     } catch (error: any) {
       console.error('❌ Error fetching quizzes:', error);
       set({

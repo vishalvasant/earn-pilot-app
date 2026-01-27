@@ -67,8 +67,8 @@ export default {
   },
   extra: {
     // Dynamically set API URL based on environment or default to localhost
-    // Production API URL
-    API_BASE_URL: "https://networks11.com",
+    // Local API URL (Android emulator -> host machine localhost)
+    API_BASE_URL: "http://10.0.2.2:8000",
     eas: {
       projectId: "156da554-3870-41b3-9a68-2191a71f936d"
     },

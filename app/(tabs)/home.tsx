@@ -16,7 +16,7 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../../hooks/useTheme';
-import { api } from '../../services/api';
+import { api, getAssetBaseUrl } from '../../services/api';
 import { useUserStore } from '../../stores/userStore';
 import { useGameStore } from '../../hooks/useGameStore';
 import { useGameCooldowns } from '../../hooks/useGameCooldowns';
@@ -90,6 +90,27 @@ export default function HomeScreen() {
   const [heroSlides, setHeroSlides] = useState<HeroSlide[]>([]);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const slideScrollRef = useRef<ScrollView>(null);
+
+  // Add-On games (Unity) from backend
+  type AddOnGame = {
+    id: number;
+    name: string;
+    package_name?: string;
+    slug: string;
+    description?: string | null;
+    category?: string | null;
+    icon_url?: string | null;
+    image_url?: string | null;
+    points_per_completion?: number;
+    points_interval_levels?: number;
+    daily_play_limit?: number;
+    play_cooldown_seconds?: number;
+    energy_reward?: number;
+  };
+
+  const [addOnGames, setAddOnGames] = useState<AddOnGame[]>([]);
+  const [selectedAddOnGame, setSelectedAddOnGame] = useState<AddOnGame | null>(null);
+  const [showAddOnModal, setShowAddOnModal] = useState(false);
   
   // Use centralized data store
   const { 
@@ -152,6 +173,17 @@ export default function HomeScreen() {
             console.warn('Hero slides fetch error:', err);
             setHeroSlides([]);
           }),
+
+          // Add-On games (Unity) list
+          api.get('/unity-open/games')
+            .then(response => {
+              const games: AddOnGame[] = response.data?.games || [];
+              setAddOnGames(games);
+            })
+            .catch(err => {
+              console.warn('Add-on games fetch error:', err);
+              setAddOnGames([]);
+            }),
         ]);
         
         // Update user store profile if dataStore has it
@@ -389,8 +421,8 @@ export default function HomeScreen() {
     }
   };
 
-  const getGameGradient = (gameSlug: string): readonly [string, string, ...string[]] => {
-    const gradients: { [key: string]: readonly [string, string, ...string[]] } = {
+  const getGameGradient = (gameSlug: string): (string | number)[] => {
+    const gradients: { [key: string]: (string | number)[] } = {
       'color-match': ['#FF6B6B', '#FF8E72'],
       'image-similarity': ['#4ECDC4', '#44A08D'],
       'math-quiz': ['#9D84B7', '#A78BFA'],
@@ -543,75 +575,44 @@ export default function HomeScreen() {
 
         {/* Add-On Games */}
         <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>ADD-ON GAMES</Text>
-        <View style={styles.addOnGamesGrid}>
-          {[
-            { id: 5, name: 'Pilot Jump', image: require('../../assets/images/pilot-jump.png') },
-            { id: 6, name: 'Water Sort', image: require('../../assets/images/water-sort.png') }
-          ].map((game) => (
-            <TouchableOpacity
-              key={game.id}
-              style={[styles.addOnGameCard, { backgroundColor: theme.card, borderColor: theme.border }]}
-              activeOpacity={0.7}
-              onPress={async () => {
-                try {
-                  if (!token || !profile?.id) {
-                    Alert.alert('Authentication Required', 'Please login to play games');
-                    return;
+        {addOnGames.length > 0 ? (
+          <View style={styles.addOnGamesGrid}>
+            {addOnGames.map((game) => (
+              <TouchableOpacity
+                key={game.id}
+                style={[styles.addOnGameCard, { backgroundColor: theme.card, borderColor: theme.border }]}
+                activeOpacity={0.85}
+                onPress={() => {
+                  setSelectedAddOnGame(game);
+                  setShowAddOnModal(true);
+                }}
+              >
+                <Image 
+                  source={
+                    (() => {
+                      const u = game.icon_url || game.image_url;
+                      if (!u || typeof u !== 'string') return require('../../assets/images/pilot-jump.png');
+                      const uri = (u.startsWith('http://') || u.startsWith('https://')) ? u : `${getAssetBaseUrl().replace(/\/$/, '')}${u.startsWith('/') ? u : `/${u}`}`;
+                      return { uri };
+                    })()
                   }
-
-                  // Debug log before launching Unity game
-                  console.log('[HomeScreen] Launching add-on game', {
-                    gameId: game.id,
-                    gameName: game.name,
-                    userId: profile.id,
-                    userEmail: profile.email,
-                    hasToken: !!token,
-                    tokenPrefix: token ? token.slice(0, 12) + '...' : null,
-                  });
-
-                  // Check if Unity game is installed (optional check - try to launch anyway)
-                  try {
-                    const isInstalled = await UnityLauncherService.isUnityGameInstalled();
-                    if (!isInstalled) {
-                      console.warn(`[HomeScreen] ${game.name} installation check failed, but attempting launch anyway...`);
-                      // Don't block - try to launch anyway as the check might be incorrect
-                    }
-                  } catch (checkError) {
-                    console.warn(`[HomeScreen] Installation check failed:`, checkError);
-                    // Continue to launch attempt
-                  }
-
-                  // Launch Unity game with authentication (using email for mapping)
-                  await UnityLauncherService.launchUnityGame({
-                    authToken: token, // Keep token as backup
-                    userId: profile.id,
-                    userEmail: profile.email, // Pass email for email-based authentication
-                    gameId: game.id,
-                    apiBaseUrl: 'http://192.168.31.206:8000/api', // Local server (Android emulator uses 10.0.2.2 for host's localhost)
-                    // apiBaseUrl: 'https://networks11.com/api', // Production API URL (uncomment when deploying)
-                  });
-
-                  console.log('[HomeScreen] Unity launch request sent');
-                } catch (error: any) {
-                  console.error(`[HomeScreen] Failed to launch ${game.name}:`, error);
-                  Alert.alert(
-                    'Launch Failed',
-                    `Failed to launch ${game.name}: ${error.message}`,
-                    [{ text: 'OK' }]
-                  );
-                }
-              }}
-            >
-              <Image 
-                source={game.image} 
-                style={styles.addOnGameImage}
-                resizeMode="cover"
-              />
-              <Text style={[styles.addOnGameName, { color: theme.text }]}>{game.name}</Text>
-              <Text style={[styles.playLabel, { color: theme.primary }]}>Play Now</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+                  style={styles.addOnGameImage}
+                  resizeMode="cover"
+                />
+                <Text style={[styles.addOnGameName, { color: theme.text }]} numberOfLines={1}>
+                  {game.name}
+                </Text>
+                <Text style={[styles.playLabel, { color: theme.primary }]}>Play Now</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.addOnGamesEmpty}>
+            <Text style={[styles.addOnGamesEmptyText, { color: theme.textSecondary }]}>
+              Add-on games will appear here once they are configured in the admin panel.
+            </Text>
+          </View>
+        )}
 
         {/* Brain Teaser Quiz - Styled like Elite Offerwall */}
         <Text style={[styles.sectionLabel, { color: theme.textSecondary, marginTop: spacing.lg }]}>BRAIN TEASER QUIZ</Text>
@@ -650,7 +651,15 @@ export default function HomeScreen() {
             // Only show mini games (system games), exclude add-on games
             // Filter by is_system_game flag or check if it's NOT an add-on game
             const isMiniGame = game.is_system_game === true || (game.is_addon_game !== true && !game.package_name);
-            return game.is_active !== false && isMiniGame;
+
+            // Hide quiz entries that should be shown in the Quiz module (avoid duplicates)
+            const name = String((game as any)?.name ?? '');
+            const slug = String((game as any)?.slug ?? '');
+            const isBrainTesterQuiz =
+              /brain\s*tester/i.test(name) ||
+              /brain[-_\s]*tester/i.test(slug);
+
+            return game.is_active !== false && isMiniGame && !isBrainTesterQuiz;
           }).map((gameConfig) => {
             const cooldown = getCooldown(gameConfig.slug);
             const isInCooldown = Boolean(cooldown && cooldown.remainingSeconds > 0);
@@ -729,6 +738,198 @@ export default function HomeScreen() {
         <View style={{ height: 150 }} />
         </Animated.View>
       </ScrollView>
+
+      {/* Add-On Game Modal */}
+      <Modal
+        visible={showAddOnModal && !!selectedAddOnGame}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAddOnModal(false)}
+      >
+        <View style={styles.addOnModalOverlay}>
+          <View style={[styles.addOnModalSheet, { backgroundColor: theme.card }]}>
+            {/* Drag handle */}
+            <View style={styles.addOnModalHandle} />
+
+            {selectedAddOnGame && (
+              <>
+                {/* Header with icon and title */}
+                <View style={styles.addOnModalHeader}>
+                  <View style={styles.addOnModalIconWrapper}>
+                    <Image
+                      source={
+                        (() => {
+                          const u = selectedAddOnGame.icon_url || selectedAddOnGame.image_url;
+                          if (!u || typeof u !== 'string') return require('../../assets/images/pilot-jump.png');
+                          const uri = (u.startsWith('http://') || u.startsWith('https://')) ? u : `${getAssetBaseUrl().replace(/\/$/, '')}${u.startsWith('/') ? u : `/${u}`}`;
+                          return { uri };
+                        })()
+                      }
+                      style={styles.addOnModalIcon}
+                      resizeMode="cover"
+                    />
+                  </View>
+                  <View style={styles.addOnModalTitleBlock}>
+                    <Text style={[styles.addOnModalTitle, { color: theme.text }]} numberOfLines={1}>
+                      {selectedAddOnGame.name}
+                    </Text>
+                    <Text style={[styles.addOnModalSubtitle, { color: theme.textSecondary }]}>
+                      Add-On Game · Play levels to earn energy
+                    </Text>
+                  </View>
+                </View>
+
+                {/* Body: earning instructions */}
+                <View style={styles.addOnModalBody}>
+                  <Text style={[styles.addOnModalSectionLabel, { color: theme.textSecondary }]}>
+                    HOW YOU EARN POINTS
+                  </Text>
+
+                  <View style={styles.addOnModalInfoCard}>
+                    {/* High-level earning summary */}
+                    <Text style={[styles.addOnModalDescription, { color: theme.text }]}>
+                      {(() => {
+                        const pts = selectedAddOnGame.points_per_completion ?? 0;
+                        const interval = selectedAddOnGame.points_interval_levels ?? 1;
+                        if (pts > 0 && interval === 1) {
+                          return `You earn ${pts} energy points for every level you complete in this game.`;
+                        }
+                        if (pts > 0 && interval > 1) {
+                          return `You earn ${pts} energy points when you complete milestone levels ${interval}, ${interval * 2}, ${interval * 3} and so on.`;
+                        }
+                        return 'Complete levels in this Unity game to earn energy points and boost your rewards inside EarnPilot.';
+                      })()}
+                    </Text>
+
+                    {/* Optional extra description from admin */}
+                    {selectedAddOnGame.description && (
+                      <Text style={[styles.addOnModalDescription, { color: theme.text }]}>
+                        {selectedAddOnGame.description}
+                      </Text>
+                    )}
+
+                    <View style={styles.addOnModalBulletList}>
+                      {typeof selectedAddOnGame.points_per_completion === 'number' &&
+                        selectedAddOnGame.points_per_completion > 0 && (
+                        <Text style={[styles.addOnModalBullet, { color: theme.textSecondary }]}>
+                          • Base reward:{' '}
+                          <Text style={styles.addOnModalBulletHighlight}>
+                            {selectedAddOnGame.points_per_completion} energy points per reward event
+                          </Text>
+                        </Text>
+                      )}
+
+                      {typeof selectedAddOnGame.points_interval_levels === 'number' &&
+                        selectedAddOnGame.points_interval_levels > 0 && (
+                        <Text style={[styles.addOnModalBullet, { color: theme.textSecondary }]}>
+                          • Reward interval:{' '}
+                          <Text style={styles.addOnModalBulletHighlight}>
+                            every {selectedAddOnGame.points_interval_levels} level
+                            {selectedAddOnGame.points_interval_levels > 1 ? 's' : ''} completed
+                          </Text>
+                        </Text>
+                      )}
+
+                      {typeof selectedAddOnGame.daily_play_limit === 'number' &&
+                        selectedAddOnGame.daily_play_limit > 0 && (
+                        <Text style={[styles.addOnModalBullet, { color: theme.textSecondary }]}>
+                          • Daily limit:{' '}
+                          <Text style={styles.addOnModalBulletHighlight}>
+                            up to {selectedAddOnGame.daily_play_limit} plays per day
+                          </Text>
+                        </Text>
+                      )}
+
+                      {typeof selectedAddOnGame.play_cooldown_seconds === 'number' &&
+                        selectedAddOnGame.play_cooldown_seconds > 0 && (
+                        <Text style={[styles.addOnModalBullet, { color: theme.textSecondary }]}>
+                          • Cooldown between sessions:{' '}
+                          <Text style={styles.addOnModalBulletHighlight}>
+                            {Math.ceil(selectedAddOnGame.play_cooldown_seconds / 60)} min
+                          </Text>
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                </View>
+
+                {/* Footer buttons */}
+                <View style={styles.addOnModalFooter}>
+                  <TouchableOpacity
+                    style={[styles.addOnModalButton, styles.addOnModalCancelButton, { borderColor: theme.border }]}
+                    onPress={() => {
+                      setShowAddOnModal(false);
+                      setSelectedAddOnGame(null);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.addOnModalButtonText, { color: theme.textSecondary }]}>
+                      Cancel
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.addOnModalButton, styles.addOnModalPlayButton, { backgroundColor: theme.primary }]}
+                    activeOpacity={0.9}
+                    onPress={async () => {
+                      if (!selectedAddOnGame) return;
+                      try {
+                        if (!token || !profile?.id) {
+                          Alert.alert('Authentication Required', 'Please login to play games');
+                          return;
+                        }
+
+                        console.log('[HomeScreen] Launching add-on game from modal', {
+                          gameId: selectedAddOnGame.id,
+                          gameName: selectedAddOnGame.name,
+                          userId: profile.id,
+                          userEmail: profile.email,
+                          hasToken: !!token,
+                          tokenPrefix: token ? token.slice(0, 12) + '...' : null,
+                        });
+
+                        // Optional installation check
+                        try {
+                          const isInstalled = await UnityLauncherService.isUnityGameInstalled();
+                          if (!isInstalled) {
+                            console.warn(
+                              `[HomeScreen] ${selectedAddOnGame.name} installation check failed, attempting launch anyway...`,
+                            );
+                          }
+                        } catch (checkError) {
+                          console.warn('[HomeScreen] Installation check failed:', checkError);
+                        }
+
+                        await UnityLauncherService.launchUnityGame({
+                          authToken: token,
+                          userId: profile.id,
+                          userEmail: profile.email,
+                          gameId: selectedAddOnGame.id,
+                        });
+
+                        console.log('[HomeScreen] Unity launch request sent');
+                        setShowAddOnModal(false);
+                        setSelectedAddOnGame(null);
+                      } catch (error: any) {
+                        console.error(`[HomeScreen] Failed to launch ${selectedAddOnGame.name}:`, error);
+                        Alert.alert(
+                          'Launch Failed',
+                          `Failed to launch ${selectedAddOnGame.name}: ${error.message}`,
+                          [{ text: 'OK' }],
+                        );
+                      }
+                    }}
+                  >
+                    <Text style={[styles.addOnModalButtonText, { color: theme.background }]}>
+                      Play
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* Cooldown Popup */}
       <ThemedPopup
@@ -948,6 +1149,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     marginBottom: spacing.lg,
   },
+  addOnGamesEmpty: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+  },
+  addOnGamesEmptyText: {
+    fontSize: typography.sm,
+    textAlign: 'left',
+  },
   addOnGameCard: {
     width: (screenWidth - spacing.xl * 2 - spacing.md) / 2,
     borderRadius: borderRadius.xl,
@@ -972,6 +1181,108 @@ const styles = StyleSheet.create({
     fontSize: typography.sm,
     fontWeight: '600',
     marginTop: spacing.xs,
+  },
+  addOnModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  addOnModalSheet: {
+    height: screenHeight * 0.5,
+    borderTopLeftRadius: borderRadius['2xl'],
+    borderTopRightRadius: borderRadius['2xl'],
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing['2xl'],
+  },
+  addOnModalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignSelf: 'center',
+    marginBottom: spacing.lg,
+  },
+  addOnModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  addOnModalIconWrapper: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    overflow: 'hidden',
+    marginRight: spacing.md,
+    borderWidth: 2,
+    borderColor: themeColors.primaryBlue,
+  },
+  addOnModalIcon: {
+    width: '100%',
+    height: '100%',
+  },
+  addOnModalTitleBlock: {
+    flex: 1,
+  },
+  addOnModalTitle: {
+    fontSize: typography.xl,
+    fontWeight: '800',
+  },
+  addOnModalSubtitle: {
+    fontSize: typography.xs,
+    marginTop: spacing.xs,
+  },
+  addOnModalBody: {
+    flex: 1,
+  },
+  addOnModalSectionLabel: {
+    fontSize: typography.xs,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginBottom: spacing.sm,
+  },
+  addOnModalInfoCard: {
+    borderRadius: borderRadius.xl,
+    borderWidth: 1,
+    borderColor: themeColors.border,
+    padding: spacing.lg,
+  },
+  addOnModalDescription: {
+    fontSize: typography.sm,
+    lineHeight: 20,
+    marginBottom: spacing.md,
+  },
+  addOnModalBulletList: {
+    gap: spacing.xs,
+  },
+  addOnModalBullet: {
+    fontSize: typography.xs,
+  },
+  addOnModalBulletHighlight: {
+    fontWeight: '700',
+    color: themeColors.primaryBlue,
+  },
+  addOnModalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: spacing.lg,
+    gap: spacing.md,
+  },
+  addOnModalButton: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addOnModalCancelButton: {
+    borderWidth: 1,
+  },
+  addOnModalPlayButton: {},
+  addOnModalButtonText: {
+    fontSize: typography.sm,
+    fontWeight: '700',
   },
   comingSoonLabel: {
     fontSize: typography.xs,

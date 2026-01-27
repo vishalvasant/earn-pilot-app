@@ -188,7 +188,7 @@ export default function WalletScreen() {
       return;
     }
     if (parseFloat(withdrawAmount) < selectedMethod.min_amount) {
-      showPopup('Error', `Minimum withdrawal amount for ${selectedMethod.name} is ₹${selectedMethod.min_amount}`);
+      showPopup('Error', `Minimum withdrawal amount for ${selectedMethod.name} is  ${selectedMethod.min_amount}`);
       return;
     }
     if (parseFloat(withdrawAmount) > walletData.balance) {
@@ -355,13 +355,13 @@ export default function WalletScreen() {
             <View style={[styles.statCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <Text style={{ fontSize: 24, marginBottom: 8 }}>💸</Text>
               <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Withdrawn</Text>
-              <Text style={[styles.statValue, { color: theme.text }]}>₹{walletData.total_withdrawn.toFixed(2)}</Text>
+              <Text style={[styles.statValue, { color: theme.text }]}> {walletData.total_withdrawn.toFixed(2)}</Text>
             </View>
 
             <View style={[styles.statCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
               <Text style={{ fontSize: 24, marginBottom: 8 }}>⏳</Text>
               <Text style={[styles.statLabel, { color: theme.textSecondary }]}>Pending</Text>
-              <Text style={[styles.statValue, { color: theme.text }]}>₹{walletData.pending_amount.toFixed(2)}</Text>
+              <Text style={[styles.statValue, { color: theme.text }]}> {walletData.pending_amount.toFixed(2)}</Text>
             </View>
           </View>
         </View>
@@ -380,7 +380,7 @@ export default function WalletScreen() {
                   <View style={{ flex: 1, gap: 4 }}>
                     <Text style={[styles.methodName, { color: theme.text }]}>{method.name}</Text>
                     <Text style={[styles.methodDesc, { color: theme.textSecondary }]}>
-                      Min: ₹{method.min_amount} • {method.processing_time}
+                      Min:  {method.min_amount} • {method.processing_time}
                     </Text>
                   </View>
                   <Text style={{ fontSize: 20 }}>
@@ -410,7 +410,7 @@ export default function WalletScreen() {
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: 4 }}>
                   <Text style={[styles.txAmount, { color: tx.type === 'credit' ? theme.success : theme.error }]}>
-                    {tx.type === 'credit' ? '+' : '-'}₹{tx.amount.toFixed(2)}
+                    {tx.type === 'credit' ? '+' : '-'} {tx.amount.toFixed(2)}
                   </Text>
                   <Text style={[styles.txStatus, { color: tx.status === 'completed' ? theme.success : theme.primary }]}>
                     {tx.status.charAt(0).toUpperCase() + tx.status.slice(1)}
@@ -465,7 +465,7 @@ export default function WalletScreen() {
                   <View>
                     <Text style={[styles.modalMethodName, { color: theme.text }]}>{method.name}</Text>
                     <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
-                      Min ₹{method.min_amount}
+                      Min  {method.min_amount}
                     </Text>
                   </View>
                 </TouchableOpacity>

@@ -1,4 +1,5 @@
 import { NativeModules, Platform } from 'react-native';
+import { APP_CONFIG } from '../config/app';
 
 const { EarnPilotUnity } = NativeModules;
 
@@ -14,6 +15,22 @@ export interface UnityGameConfig {
  * Service to launch Unity games with authentication
  */
 export class UnityLauncherService {
+  private static resolveApiBaseUrl(): string {
+    const rawBaseURL = APP_CONFIG.API_BASE_URL;
+    let resolvedBaseURL = rawBaseURL;
+
+    // On Android emulator, localhost/127.0.0.1 of the host machine is 10.0.2.2
+    if (Platform.OS === 'android') {
+      if (rawBaseURL.includes('127.0.0.1')) {
+        resolvedBaseURL = rawBaseURL.replace('127.0.0.1', '10.0.2.2');
+      } else if (rawBaseURL.includes('localhost')) {
+        resolvedBaseURL = rawBaseURL.replace('localhost', '10.0.2.2');
+      }
+    }
+
+    return `${resolvedBaseURL}/api`;
+  }
+
   /**
    * Launch Unity game (Pilot Jump) with authentication
    * 
@@ -30,13 +47,8 @@ export class UnityLauncherService {
     }
 
     try {
-      // Use provided API URL or default to local server
-      // Android emulator: 10.0.2.2 maps to host's localhost
-      // iOS simulator: 127.0.0.1 works directly
-      const defaultApiUrl = Platform.OS === 'android' 
-        ? 'http://10.0.2.2:8000/api' 
-        : 'http://127.0.0.1:8000/api';
-      const finalApiBaseUrl = config.apiBaseUrl || defaultApiUrl;
+      // Use provided API URL or fall back to APP_CONFIG-driven base URL
+      const finalApiBaseUrl = config.apiBaseUrl || UnityLauncherService.resolveApiBaseUrl();
 
       // Debug log to verify what we are sending from the React Native app
       console.log('[UnityLauncher] LaunchUnityGame config', {
