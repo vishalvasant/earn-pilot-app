@@ -4,10 +4,12 @@ import { api } from './api';
 
 /**
  * FCM Service for handling Firebase Cloud Messaging
- * Registers device tokens and handles incoming notifications
+ * Registers device tokens and handles incoming notifications.
+ * On Android, user can enable notifications from Settings → Apps → Earn Pilot → Notifications.
+ * POST_NOTIFICATIONS is declared in app.config.js so the app can receive notifications when enabled.
  */
 
-// Request user permission for notifications
+// Request notification permission (system dialog). Not used by default; user enables from device Settings.
 export async function requestNotificationPermission() {
   try {
     const authStatus = await messaging().requestPermission();

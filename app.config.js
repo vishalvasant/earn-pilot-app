@@ -25,7 +25,8 @@ export default {
     permissions: [
       'RECEIVE_BOOT_COMPLETED',
       'VIBRATE',
-      'WAKE_LOCK'
+      'WAKE_LOCK',
+      'android.permission.POST_NOTIFICATIONS'
     ]
   },
   ios: {
@@ -66,9 +67,8 @@ export default {
     typedRoutes: true
   },
   extra: {
-    // Dynamically set API URL based on environment or default to localhost
-    // Local API URL (Android emulator -> host machine localhost)
-    API_BASE_URL: "http://10.0.2.2:8000",
+    // Production API URL (use for release builds)
+    API_BASE_URL: "https://networks11.com",
     eas: {
       projectId: "156da554-3870-41b3-9a68-2191a71f936d"
     },
@@ -79,8 +79,6 @@ export default {
     },
     GOOGLE_CLIENT_ID: "731854608021-212j32uld6l6cgrjoce8l2f9mp7q72vg.apps.googleusercontent.com",
     APP_IDENTIFIER: "earn-pilot",
-    // For local development (uncomment when needed):
-    // API_BASE_URL: "http://10.0.2.2:8000", // Android emulator
-    // API_BASE_URL: "http://192.168.31.25:8000", // Real device on LAN
+    // For local dev, override in config/app.ts or: API_BASE_URL: "http://10.0.2.2:8000"
   },
 };

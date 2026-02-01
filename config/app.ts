@@ -1,6 +1,6 @@
 export const APP_CONFIG = {
-  API_BASE_URL: 'http://10.0.2.2:8000', // Android emulator -> host machine localhost
-  // API_BASE_URL: 'https://networks11.com', // Production server
+  API_BASE_URL: 'https://networks11.com', // Production
+  // API_BASE_URL: 'http://10.0.2.2:8000', // Local (Android emulator)
   APP_IDENTIFIER: 'earn-pilot',
   FIREBASE_API_KEY: 'AIzaSyDJcurdZwgTu3J4VWQLBf8OOdvgmIF5uro',
   FIREBASE_AUTH_DOMAIN: 'earn-pilot-app.firebaseapp.com',

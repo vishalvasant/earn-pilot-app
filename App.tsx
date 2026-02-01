@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -6,6 +6,7 @@ import { View, Text } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import '@react-native-firebase/app';
+import { getFCMToken, registerDeviceToken, setupMessageHandlers } from './services/fcm';
 // import { getApps } from '@react-native-firebase/app';
 // Firebase initializes natively from google-services.json; no manual JS init needed
 // Auth module is used in the store
@@ -168,7 +169,26 @@ const TabNavigator = () => {
 
 const RootStack = () => {
   const [isLoading, setIsLoading] = useState(true);
-  const { restoreToken, isAuthenticated } = useAuthStore();
+  const { restoreToken, isAuthenticated, token } = useAuthStore();
+  const notificationSetupDone = useRef(false);
+
+  // Register FCM token when user is logged in. User enables notifications from device Settings → Apps → Earn Pilot → Notifications.
+  useEffect(() => {
+    if (!isAuthenticated || !token || notificationSetupDone.current) return;
+    const setupNotifications = async () => {
+      notificationSetupDone.current = true;
+      try {
+        setupMessageHandlers();
+        const fcmToken = await getFCMToken();
+        if (fcmToken && token) {
+          await registerDeviceToken(token, fcmToken);
+        }
+      } catch (err) {
+        console.warn('Notification setup error:', err);
+      }
+    };
+    setupNotifications();
+  }, [isAuthenticated, token]);
 
   useEffect(() => {
     const bootstrapAsync = async () => {

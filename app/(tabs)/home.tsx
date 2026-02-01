@@ -32,7 +32,7 @@ import MathQuizGame from '../../components/games/MathQuizGame';
 import MemoryPatternGame from '../../components/games/MemoryPatternGame';
 import ThemedPopup from '../../components/ThemedPopup';
 import { useAuthStore } from '../../stores/authStore';
-import { requestNotificationPermission, getFCMToken, registerDeviceToken, setupMessageHandlers } from '../../services/fcm';
+import { getFCMToken, registerDeviceToken, setupMessageHandlers } from '../../services/fcm';
 import FixedBannerAd from '../../components/FixedBannerAd';
 import { UnityLauncherService } from '../../services/unityLauncher';
 import { APP_CONFIG } from '../../config/app';
@@ -123,20 +123,16 @@ export default function HomeScreen() {
   useEffect(() => {
     const initialize = async () => {
       try {
-        // Initialize FCM for notifications (non-blocking)
-        requestNotificationPermission().then(async (hasPermission) => {
-          if (hasPermission) {
-            const fcmToken = await getFCMToken();
-            if (fcmToken) {
-              const authToken = useAuthStore.getState().token;
-              if (authToken) {
-                await registerDeviceToken(authToken, fcmToken);
-              }
+        // Register FCM token if user has enabled notifications in device Settings → Apps → Earn Pilot → Notifications
+        getFCMToken().then(async (fcmToken) => {
+          if (fcmToken) {
+            const authToken = useAuthStore.getState().token;
+            if (authToken) {
+              await registerDeviceToken(authToken, fcmToken);
             }
           }
-        }).catch(err => console.warn('FCM initialization error:', err));
+        }).catch(err => console.warn('FCM token error (enable notifications in app Settings):', err));
         
-        // Setup message handlers for incoming notifications
         setupMessageHandlers();
         
         // Fetch all data in parallel: dashboard, games, tasks, quizzes, profile
