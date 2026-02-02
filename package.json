@@ -10,6 +10,7 @@
     "prebuild": "npx expo prebuild --platform android --clean",
     "build:apk": "npm run prebuild && cd android && ./gradlew assembleRelease && cd ..",
     "build:apk:only": "cd android && ./gradlew assembleRelease && cd ..",
+    "build:apk:no-expo": "cd android && ./gradlew assembleRelease && cd ..",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },

@@ -51,6 +51,7 @@ export interface AdMobConfig {
   interstitial_ad_frequency: number;
   rewarded_ad_points_bonus: number;
   max_rewarded_ads_per_day: number;
+  // Quiz ad settings are per-quiz (from quiz payload), not from AdMob config
   // Platform specific ad unit IDs
   banner_ad_id?: string;
   banner_ad_tag?: string; // Google Ad Manager tag (e.g., /23329430372/banne)

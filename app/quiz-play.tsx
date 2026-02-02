@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   SafeAreaView,
   ScrollView,
@@ -8,12 +8,13 @@ import {
   StyleSheet,
   StatusBar,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useTheme } from '../hooks/useTheme';
+import { useAdMob } from '../hooks/useAdMob';
 import { api } from '../services/api';
 import { useDataStore } from '../stores/dataStore';
+import ThemedPopup from '../components/ThemedPopup';
 
 type QuizOption = { id: number; option_text: string; order?: number };
 type QuizQuestion = { id: number; question_text: string; points?: number; options: QuizOption[] };
@@ -23,6 +24,9 @@ type QuizPayload = {
   description?: string | null;
   reward_points: number;
   passing_percentage: number;
+  /** Show interstitial every N questions (from admin quiz settings) */
+  show_quiz_ads?: boolean;
+  quiz_ad_interval?: number;
   questions: QuizQuestion[];
 };
 
@@ -32,6 +36,8 @@ export default function QuizPlayScreen() {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const fetchProfile = useDataStore((s) => s.fetchProfile);
+  const { showInterstitial } = useAdMob();
+  const prevIndexRef = useRef<number>(0);
 
   const quizId: number = route?.params?.id;
 
@@ -40,6 +46,14 @@ export default function QuizPlayScreen() {
   const [quiz, setQuiz] = useState<QuizPayload | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, number>>({});
+  const [resultPopup, setResultPopup] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
+  const showPopup = (title: string, message: string, onConfirm: () => void) => {
+    setResultPopup({ title, message, onConfirm });
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -50,10 +64,17 @@ export default function QuizPlayScreen() {
         setQuiz(payload);
         setCurrentIndex(0);
         setAnswers({});
+        prevIndexRef.current = 0;
       } catch (e: any) {
         console.log('Failed to load quiz:', e?.message || e);
-        Alert.alert('Error', 'Failed to load quiz. Please try again.');
-        navigation.goBack();
+        const isNetworkError = e?.message === 'Network Error' || !e?.response;
+        const message = isNetworkError
+          ? 'Cannot reach server. Check your internet connection and try again.'
+          : (e?.response?.data?.message || 'Failed to load quiz. Please try again.');
+        showPopup('Error', message, () => {
+          setResultPopup(null);
+          navigation.goBack();
+        });
       } finally {
         setLoading(false);
       }
@@ -68,6 +89,18 @@ export default function QuizPlayScreen() {
   const canGoNext = currentIndex < (quiz?.questions?.length || 0) - 1;
   const canGoBack = currentIndex > 0;
 
+  // Show interstitial at this quiz's configured interval (set in admin when creating/editing quiz)
+  const showQuizAds = quiz?.show_quiz_ads !== false;
+  const quizAdInterval = Math.max(1, quiz?.quiz_ad_interval ?? 3);
+  useEffect(() => {
+    if (!quiz || !showQuizAds || currentIndex <= prevIndexRef.current) return;
+    const questionNumber = currentIndex + 1;
+    if (questionNumber > 0 && questionNumber % quizAdInterval === 0) {
+      showInterstitial?.();
+    }
+    prevIndexRef.current = currentIndex;
+  }, [quiz, currentIndex, showQuizAds, quizAdInterval, showInterstitial]);
+
   const onSubmit = async () => {
     if (!quiz) return;
 
@@ -78,17 +111,26 @@ export default function QuizPlayScreen() {
 
       await fetchProfile(true);
 
-      Alert.alert(
-        data?.passed ? '✅ Quiz Completed' : '❌ Quiz Failed',
-        `${data?.message || 'Quiz submitted.'}\n\nScore: ${data?.score}%\nPoints: +${data?.points_earned || 0}`,
-        [{ text: 'OK', onPress: () => navigation.goBack() }],
-      );
+      const title = data?.passed ? 'Quiz Completed' : 'Quiz Failed';
+      const message = `${data?.message || 'Quiz submitted.'}\n\nScore: ${data?.score}%\nPoints: +${data?.points_earned ?? 0}`;
+      setResultPopup({
+        title,
+        message,
+        onConfirm: () => {
+          setResultPopup(null);
+          navigation.goBack();
+        },
+      });
     } catch (e: any) {
       const msg =
         e?.response?.data?.message ||
         e?.message ||
         'Failed to submit quiz. Please try again.';
-      Alert.alert('Error', msg);
+      setResultPopup({
+        title: 'Error',
+        message: msg,
+        onConfirm: () => setResultPopup(null),
+      });
     } finally {
       setSubmitting(false);
     }
@@ -101,6 +143,16 @@ export default function QuizPlayScreen() {
           <ActivityIndicator size="large" color={theme.primary} />
           <Text style={[styles.loadingText, { color: theme.text }]}>Loading quiz...</Text>
         </View>
+        {resultPopup && (
+          <ThemedPopup
+            visible={!!resultPopup}
+            title={resultPopup.title}
+            message={resultPopup.message}
+            confirmText="OK"
+            onConfirm={resultPopup.onConfirm}
+            onClose={resultPopup.onConfirm}
+          />
+        )}
       </SafeAreaView>
     );
   }
@@ -111,6 +163,16 @@ export default function QuizPlayScreen() {
         <View style={styles.loading}>
           <Text style={[styles.loadingText, { color: theme.text }]}>Quiz not available.</Text>
         </View>
+        {resultPopup && (
+          <ThemedPopup
+            visible={!!resultPopup}
+            title={resultPopup.title}
+            message={resultPopup.message}
+            confirmText="OK"
+            onConfirm={resultPopup.onConfirm}
+            onClose={resultPopup.onConfirm}
+          />
+        )}
       </SafeAreaView>
     );
   }
@@ -189,7 +251,9 @@ export default function QuizPlayScreen() {
                 { backgroundColor: theme.primary, borderColor: theme.primary, opacity: selectedOptionId ? 1 : 0.6 },
               ]}
               disabled={!selectedOptionId}
-              onPress={() => setCurrentIndex((i) => i + 1)}
+              onPress={() => {
+                setCurrentIndex((i) => i + 1);
+              }}
             >
               <Text style={[styles.navButtonText, { color: theme.background }]}>Next</Text>
             </TouchableOpacity>
@@ -209,6 +273,17 @@ export default function QuizPlayScreen() {
           )}
         </View>
       </ScrollView>
+
+      {resultPopup && (
+        <ThemedPopup
+          visible={!!resultPopup}
+          title={resultPopup.title}
+          message={resultPopup.message}
+          confirmText="OK"
+          onConfirm={resultPopup.onConfirm}
+          onClose={resultPopup.onConfirm}
+        />
+      )}
     </SafeAreaView>
   );
 }
