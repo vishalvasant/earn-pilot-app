@@ -26,6 +26,8 @@ interface AuthState {
   token: string | null;
   user: User | null;
   isAuthenticated: boolean;
+  /** True when user just signed up (not in DB before) and must see referral code screen before home. Not persisted. */
+  isNewUserPendingReferral: boolean;
   bootstrapped: boolean;
   isLoading: boolean;
   error: string | null;
@@ -33,7 +35,8 @@ interface AuthState {
   bootstrap: () => Promise<void>;
   restoreToken: () => Promise<void>;
   setAuth: (payload: { token: string; user: User }) => Promise<void>;
-  googleSignIn: () => Promise<void>;
+  googleSignIn: () => Promise<{ is_new_user: boolean; user: User; token: string } | void>;
+  clearNewUserPendingReferral: () => void;
   logout: () => Promise<void>;
   clearError: () => void;
 }
@@ -42,6 +45,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   token: null,
   user: null,
   isAuthenticated: false,
+  isNewUserPendingReferral: false,
   bootstrapped: false,
   isLoading: false,
   error: null,
@@ -186,14 +190,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           throw new Error(errorMessage);
         }
 
-        // Backend returns: { success: true, user: {...}, token: "..." }
+        // Backend returns: { success: true, user: {...}, token: "...", is_new_user?: boolean }
         if (data.success && data.user && data.token) {
-          await get().setAuth({
+          const isNewUser = !!data.is_new_user;
+          console.log('Auth response: is_new_user =', data.is_new_user, '→ show referral screen =', isNewUser);
+          // Persist and set auth + referral flag in one update so RootStack never shows MainApp first for new users
+          await AsyncStorage.setItem('auth_token', data.token);
+          await AsyncStorage.setItem('user_data', JSON.stringify(data.user));
+          set({
             token: data.token,
             user: data.user,
+            isAuthenticated: true,
+            isNewUserPendingReferral: isNewUser,
+            isLoading: false,
+            error: null,
           });
-          console.log('Authentication completed successfully');
-          set({ isLoading: false });
+          console.log('Authentication completed successfully', isNewUser ? '(new user → referral screen)' : '');
+          return { is_new_user: isNewUser, user: data.user, token: data.token };
         } else {
           console.error('Invalid response structure:', data);
           throw new Error(data?.message || 'Login failed: Invalid response from server');
@@ -223,13 +236,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
+  clearNewUserPendingReferral: () => {
+    set({ isNewUserPendingReferral: false });
+  },
+
   logout: async () => {
     try {
       await GoogleSignin.signOut();
       await auth().signOut();
       await AsyncStorage.removeItem('auth_token');
       await AsyncStorage.removeItem('user_data');
-      set({ token: null, user: null, isAuthenticated: false });
+      set({ token: null, user: null, isAuthenticated: false, isNewUserPendingReferral: false });
       
       // Clear all stores on logout
       useDataStore.getState().clearData();

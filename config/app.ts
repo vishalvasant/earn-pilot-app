@@ -1,7 +1,12 @@
 export const APP_CONFIG = {
   API_BASE_URL: 'https://networks11.com', // Production
+  // API_BASE_URL: 'http://192.168.31.102:8000', // Local (Android emulator)
   // API_BASE_URL: 'http://10.0.2.2:8000', // Local (Android emulator)
   APP_IDENTIFIER: 'earn-pilot',
+  /** Fallback store URL for add-on games when admin API does not provide store_url. Append package_name for Play Store. */
+  ADDON_GAME_STORE_URL: 'https://play.google.com/store/apps/details?id=',
+  /** Play Store link for Earn Pilot app (referral share/copy). */
+  PLAY_STORE_APP_URL: 'https://play.google.com/store/apps/details?id=com.networks11.earnpilot',
   FIREBASE_API_KEY: 'AIzaSyDJcurdZwgTu3J4VWQLBf8OOdvgmIF5uro',
   FIREBASE_AUTH_DOMAIN: 'earn-pilot-app.firebaseapp.com',
   FIREBASE_PROJECT_ID: 'earn-pilot-app',

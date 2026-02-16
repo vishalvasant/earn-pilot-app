@@ -9,8 +9,28 @@ import { api } from './api';
  * POST_NOTIFICATIONS is declared in app.config.js so the app can receive notifications when enabled.
  */
 
-// Request notification permission (system dialog). Not used by default; user enables from device Settings.
-export async function requestNotificationPermission() {
+/**
+ * Check if the app currently has notification permission (without requesting).
+ * Use this to gate app access: only allow when this returns true.
+ */
+export async function hasNotificationPermission(): Promise<boolean> {
+  try {
+    const authStatus = await messaging().hasPermission();
+    const enabled =
+      authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+      authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+    return enabled;
+  } catch (error) {
+    console.error('Error checking notification permission:', error);
+    return false;
+  }
+}
+
+/**
+ * Request notification permission (shows system dialog).
+ * Returns true only when the user actually grants permission.
+ */
+export async function requestNotificationPermission(): Promise<boolean> {
   try {
     const authStatus = await messaging().requestPermission();
     const enabled =

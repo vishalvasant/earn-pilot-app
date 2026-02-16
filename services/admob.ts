@@ -169,8 +169,7 @@ class AdMobService {
 
   // Banner Ad Methods
   getBannerAdId(): string {
-    // Force test banner for testing
-    console.log('🧪 Using Google test banner ID for testing');
+    // Force test banner for testing (no log per call to avoid spam when component re-renders)
     return GOOGLE_TEST_IDS.BANNER;
     
     /* Original logic - commented for testing

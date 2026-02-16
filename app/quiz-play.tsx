@@ -15,6 +15,7 @@ import { useAdMob } from '../hooks/useAdMob';
 import { api } from '../services/api';
 import { useDataStore } from '../stores/dataStore';
 import ThemedPopup from '../components/ThemedPopup';
+import FixedBannerAd from '../components/FixedBannerAd';
 
 type QuizOption = { id: number; option_text: string; order?: number };
 type QuizQuestion = { id: number; question_text: string; points?: number; options: QuizOption[] };
@@ -36,7 +37,7 @@ export default function QuizPlayScreen() {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const fetchProfile = useDataStore((s) => s.fetchProfile);
-  const { showInterstitial } = useAdMob();
+  const { showInterstitial, shouldShowBanner, getBannerAdId } = useAdMob();
   const prevIndexRef = useRef<number>(0);
 
   const quizId: number = route?.params?.id;
@@ -196,7 +197,7 @@ export default function QuizPlayScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 30 }}>
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: shouldShowBanner ? 100 : 30 }}>
         <View style={[styles.progressRow, { borderColor: theme.border }]}>
           <Text style={[styles.progressText, { color: theme.textSecondary }]}>
             Question {currentIndex + 1} / {total}
@@ -284,6 +285,12 @@ export default function QuizPlayScreen() {
           onClose={resultPopup.onConfirm}
         />
       )}
+
+      <FixedBannerAd
+        shouldShowBanner={shouldShowBanner}
+        getBannerAdId={getBannerAdId}
+        backgroundColor={theme.background}
+      />
     </SafeAreaView>
   );
 }

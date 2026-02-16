@@ -81,11 +81,7 @@ export default function LoginScreen() {
     
     try {
       await googleSignIn();
-      // Navigate to home after successful sign-in
-      navigation.reset({
-        index: 0,
-        routes: [{ name: 'MainApp' }],
-      } as any);
+      // Store drives UI: new users get ReferralCode (isNewUserPendingReferral), others get MainApp
     } catch (err: any) {
       console.error('Sign-in error:', err);
       setError(err.message || 'Failed to sign in. Please try again.');

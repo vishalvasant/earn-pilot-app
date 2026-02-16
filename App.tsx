@@ -2,11 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View, Text } from 'react-native';
+import { View, Text, AppState, AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import '@react-native-firebase/app';
-import { getFCMToken, registerDeviceToken, setupMessageHandlers } from './services/fcm';
+import { getFCMToken, registerDeviceToken, setupMessageHandlers, hasNotificationPermission } from './services/fcm';
 // import { getApps } from '@react-native-firebase/app';
 // Firebase initializes natively from google-services.json; no manual JS init needed
 // Auth module is used in the store
@@ -19,7 +19,9 @@ import { APP_CONFIG } from './config/app';
 
 // Screens
 import SplashScreen from './app/SplashScreen';
+import NotificationPermissionScreen from './app/NotificationPermissionScreen';
 import LoginScreen from './app/(auth)/login';
+import ReferralCodeScreen from './app/(auth)/referral-code';
 import HomeScreen from './app/(tabs)/home';
 import TasksScreen from './app/(tabs)/tasks';
 import GamesScreen from './app/(tabs)/games';
@@ -28,6 +30,7 @@ import ProfileScreen from './app/(tabs)/profile';
 import TaskDetailScreen from './app/task-detail';
 import QuizzesScreen from './app/quizzes';
 import QuizPlayScreen from './app/quiz-play';
+import WithdrawScreen from './app/withdraw';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -40,6 +43,7 @@ const AuthStack = () => {
       }}
     >
       <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="ReferralCode" component={ReferralCodeScreen} />
     </Stack.Navigator>
   );
 };
@@ -67,6 +71,11 @@ const MainStack = () => {
         name="QuizPlay"
         component={QuizPlayScreen}
         options={{ animation: 'slide_from_right', title: 'Quiz' }}
+      />
+      <Stack.Screen
+        name="Withdraw"
+        component={WithdrawScreen}
+        options={{ animation: 'slide_from_right', title: 'Withdraw' }}
       />
     </Stack.Navigator>
   );
@@ -169,10 +178,11 @@ const TabNavigator = () => {
 
 const RootStack = () => {
   const [isLoading, setIsLoading] = useState(true);
-  const { restoreToken, isAuthenticated, token } = useAuthStore();
+  const [notificationGranted, setNotificationGranted] = useState(false);
+  const { restoreToken, isAuthenticated, isNewUserPendingReferral, token } = useAuthStore();
   const notificationSetupDone = useRef(false);
 
-  // Register FCM token when user is logged in. User enables notifications from device Settings → Apps → Earn Pilot → Notifications.
+  // Register FCM token when user is logged in (notification permission already granted at app start).
   useEffect(() => {
     if (!isAuthenticated || !token || notificationSetupDone.current) return;
     const setupNotifications = async () => {
@@ -228,8 +238,28 @@ const RootStack = () => {
     bootstrapAsync();
   }, [restoreToken]);
 
+  // Re-check actual permission when app comes to foreground (e.g. user returned from Settings after enabling). Must be before any conditional return so hook order is stable.
+  useEffect(() => {
+    if (notificationGranted) return;
+    const sub = AppState.addEventListener('change', async (nextState: AppStateStatus) => {
+      if (nextState !== 'active') return;
+      const hasPermission = await hasNotificationPermission();
+      if (hasPermission) setNotificationGranted(true);
+    });
+    return () => sub.remove();
+  }, [notificationGranted]);
+
   if (isLoading) {
     return <SplashScreen />;
+  }
+
+  // After splash: show permission screen until we actually have notification permission.
+  if (!notificationGranted) {
+    return (
+      <NotificationPermissionScreen
+        onGranted={() => setNotificationGranted(true)}
+      />
+    );
   }
 
   return (
@@ -238,16 +268,12 @@ const RootStack = () => {
         headerShown: false,
       }}
     >
-      {isAuthenticated ? (
-        <Stack.Screen
-          name="MainApp"
-          component={MainStack}
-        />
+      {!isAuthenticated ? (
+        <Stack.Screen name="Auth" component={AuthStack} />
+      ) : isNewUserPendingReferral ? (
+        <Stack.Screen name="ReferralCode" component={ReferralCodeScreen} />
       ) : (
-        <Stack.Screen
-          name="Auth"
-          component={AuthStack}
-        />
+        <Stack.Screen name="MainApp" component={MainStack} />
       )}
     </Stack.Navigator>
   );

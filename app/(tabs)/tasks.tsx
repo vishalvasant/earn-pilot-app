@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { SafeAreaView, ScrollView, StatusBar, Text, View, StyleSheet, TouchableOpacity, Animated, ActivityIndicator } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../hooks/useTheme';
 import { useDataStore } from '../../stores/dataStore';
 import { useAdMob } from '../../hooks/useAdMob';
@@ -31,36 +31,43 @@ export default function TasksScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
 
-  const [readExpanded, setReadExpanded] = useState(true);
-  const [watchExpanded, setWatchExpanded] = useState(false);
-  const [otherExpanded, setOtherExpanded] = useState(false);
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'completed'>('open'); // Default to 'open'
-  
+  const isFirstFocusRef = React.useRef(true);
+
   // Use centralized data store for tasks
   const { tasks: allTasks, tasksLoading: loading, fetchTasks } = useDataStore();
 
-  // Fetch tasks from store (will use cache if available)
+  // Fetch tasks on mount (one request; uses cache)
   useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
+  // When returning to this tab, force refresh so list is up to date. Skip first focus to avoid double fetch.
+  useFocusEffect(
+    React.useCallback(() => {
+      if (isFirstFocusRef.current) {
+        isFirstFocusRef.current = false;
+        return;
+      }
+      fetchTasks(true);
+    }, [fetchTasks])
+  );
 
-  // Categorize tasks by title keywords (since no type field exists)
-  const readTasks = allTasks.filter((task) => {
-    const title = task.title.toLowerCase();
-    return title.includes('read') || title.includes('article') || title.includes('news') || title.includes('explore') || title.includes('profile');
-  });
-  const watchTasks = allTasks.filter((task) => {
-    const title = task.title.toLowerCase();
-    return title.includes('watch') || title.includes('video') || title.includes('stream') || title.includes('ad');
-  });
+  // Build dynamic categories from API-provided `task.category` (fallback to 'Uncategorized')
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    allTasks.forEach(t => set.add(t.category?.trim() || 'Uncategorized'));
+    return Array.from(set);
+  }, [allTasks]);
 
-  // All other tasks that don't match categories
-  const otherTasks = allTasks.filter((task) => {
-    const title = task.title.toLowerCase();
-    const isRead = title.includes('read') || title.includes('article') || title.includes('news') || title.includes('explore') || title.includes('profile');
-    const isWatch = title.includes('watch') || title.includes('video') || title.includes('stream') || title.includes('ad');
-    return !isRead && !isWatch;
-  });
+  useEffect(() => {
+    // Initialize expanded state for categories (first category expanded by default)
+    if (categories.length > 0 && Object.keys(expandedCategories).length === 0) {
+      const init: Record<string, boolean> = {};
+      categories.forEach((c, i) => init[c] = i === 0);
+      setExpandedCategories(init);
+    }
+  }, [categories, expandedCategories]);
 
   // Filter tasks based on status
   const filterTasksByStatus = (tasks: Task[]) => {
@@ -70,9 +77,10 @@ export default function TasksScreen() {
     return tasks;
   };
 
-  const filteredReadTasks = filterTasksByStatus(readTasks);
-  const filteredWatchTasks = filterTasksByStatus(watchTasks);
-  const filteredOtherTasks = filterTasksByStatus(otherTasks);
+  const tasksByCategory = (category: string) => {
+    const list = allTasks.filter(t => (t.category?.trim() || 'Uncategorized') === category);
+    return filterTasksByStatus(list);
+  };
 
   useEffect(() => {
     Animated.parallel([
@@ -140,252 +148,87 @@ export default function TasksScreen() {
             </View>
           ) : (
             <>
-              {/* Read & Earn */}
-              <TouchableOpacity 
-                style={styles.categoryLabel} 
-                onPress={() => setReadExpanded(!readExpanded)} 
-                activeOpacity={0.6}
-              >
-                <View style={styles.categoryHeader}>
-                  <Text style={styles.categoryIcon}>📰</Text>
-                  <View style={styles.categoryInfo}>
-                    <Text style={[styles.expandTitle, { color: theme.text }]}>Read & Earn</Text>
-                    <Text style={[styles.taskCount, { color: theme.textSecondary }]}>
-                      {filteredReadTasks.length} {filteredReadTasks.length === 1 ? 'task' : 'tasks'}
-                    </Text>
-                  </View>
-                  <Text style={[styles.expandIcon, { color: theme.textSecondary }]}>
-                    {readExpanded ? '▲' : '▼'}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-              {readExpanded && filteredReadTasks.length > 0 && (
-                <View style={[styles.divider, { backgroundColor: theme.border }]} />
-              )}
-              {readExpanded && (
-                <View style={styles.tasksList}>
-                  {filteredReadTasks.length > 0 ? (
-                    filteredReadTasks.map((task, index) => (
-                      <TouchableOpacity 
-                        key={task.id} 
-                        style={[
-                          styles.listItem, 
-                          { 
-                            backgroundColor: theme.card, 
-                            borderColor: theme.border,
-                          }
-                        ]}
-                        onPress={() => {
-                          navigation.navigate('TaskDetail', { taskId: task.id });
-                        }}
-                        activeOpacity={0.7}
-                        disabled={task.disabled}
-                      >
-                        <View style={styles.taskContent}>
-                          <View style={styles.taskInfo}>
-                            <Text style={[
-                              styles.listText, 
-                              { color: task.disabled ? theme.textSecondary : theme.text }
-                            ]}>
-                              {task.title}
-                            </Text>
-                            {task.description && (
-                              <Text style={[styles.taskDesc, { color: theme.textSecondary }]} numberOfLines={2}>
-                                {task.description}
-                              </Text>
-                            )}
-                            {task.has_subtasks && (
-                              <View style={styles.subtaskBadge}>
-                                <Text style={[styles.subtaskIndicator, { color: theme.primary }]}>
-                                  {task.subtasks?.length || 0} subtasks →
-                                </Text>
-                              </View>
-                            )}
-                          </View>
-                          <View style={[styles.rewardBadge, { backgroundColor: theme.primary + '15' }]}>
-                            <Text style={[
-                              styles.rewardText, 
-                              { color: task.disabled ? theme.textSecondary : theme.primary }
-                            ]}>
-                              +{task.reward_points}
-                            </Text>
-                          </View>
+              {/* Render dynamic categories (grouped by category from API) */}
+              {categories.map((category) => {
+                const items = tasksByCategory(category);
+                const expanded = !!expandedCategories[category];
+                if (items.length === 0) return null;
+                return (
+                  <React.Fragment key={category}>
+                    <TouchableOpacity
+                      style={styles.categoryLabel}
+                      onPress={() => setExpandedCategories(prev => ({ ...prev, [category]: !prev[category] }))}
+                      activeOpacity={0.6}
+                    >
+                      <View style={styles.categoryHeader}>
+                        <View style={{ width: 34, height: 34, borderRadius: 8, backgroundColor: theme.primary + '15', alignItems: 'center', justifyContent: 'center' }}>
+                          <Text style={{ color: theme.primary, fontWeight: '700' }}>{(category || 'U').charAt(0).toUpperCase()}</Text>
                         </View>
-                      </TouchableOpacity>
-                    ))
-                  ) : (
-                    <View style={styles.emptyState}>
-                      <Text style={[styles.emptyStateIcon]}>📭</Text>
-                      <Text style={[styles.noTasksText, { color: theme.textSecondary }]}>
-                        No read tasks available
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              )}
-
-              {/* Watch & Earn */}
-              <TouchableOpacity 
-                style={styles.categoryLabel} 
-                onPress={() => setWatchExpanded(!watchExpanded)} 
-                activeOpacity={0.6}
-              >
-                <View style={styles.categoryHeader}>
-                  <Text style={styles.categoryIcon}>🎥</Text>
-                  <View style={styles.categoryInfo}>
-                    <Text style={[styles.expandTitle, { color: theme.text }]}>Watch & Earn</Text>
-                    <Text style={[styles.taskCount, { color: theme.textSecondary }]}>
-                      {filteredWatchTasks.length} {filteredWatchTasks.length === 1 ? 'task' : 'tasks'}
-                    </Text>
-                  </View>
-                  <Text style={[styles.expandIcon, { color: theme.textSecondary }]}>
-                    {watchExpanded ? '▲' : '▼'}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-              {watchExpanded && filteredWatchTasks.length > 0 && (
-                <View style={[styles.divider, { backgroundColor: theme.border }]} />
-              )}
-              {watchExpanded && (
-                <View style={styles.tasksList}>
-                  {filteredWatchTasks.length > 0 ? (
-                    filteredWatchTasks.map((task) => (
-                      <TouchableOpacity 
-                        key={task.id} 
-                        style={[
-                          styles.listItem, 
-                          { 
-                            backgroundColor: theme.card, 
-                            borderColor: theme.border,
-                          }
-                        ]}
-                        onPress={() => {
-                          navigation.navigate('TaskDetail', { taskId: task.id });
-                        }}
-                        activeOpacity={0.7}
-                        disabled={task.disabled}
-                      >
-                        <View style={styles.taskContent}>
-                          <View style={styles.taskInfo}>
-                            <Text style={[
-                              styles.listText, 
-                              { color: task.disabled ? theme.textSecondary : theme.text }
-                            ]}>
-                              {task.title}
-                            </Text>
-                            {task.description && (
-                              <Text style={[styles.taskDesc, { color: theme.textSecondary }]} numberOfLines={2}>
-                                {task.description}
-                              </Text>
-                            )}
-                            {task.has_subtasks && (
-                              <View style={styles.subtaskBadge}>
-                                <Text style={[styles.subtaskIndicator, { color: theme.primary }]}>
-                                  {task.subtasks?.length || 0} subtasks →
-                                </Text>
-                              </View>
-                            )}
-                          </View>
-                          <View style={[styles.rewardBadge, { backgroundColor: theme.primary + '15' }]}>
-                            <Text style={[
-                              styles.rewardText, 
-                              { color: task.disabled ? theme.textSecondary : theme.primary }
-                            ]}>
-                              +{task.reward_points}
-                            </Text>
-                          </View>
+                        <View style={styles.categoryInfo}>
+                          <Text style={[styles.expandTitle, { color: theme.text }]}>{category}</Text>
+                          <Text style={[styles.taskCount, { color: theme.textSecondary }]}>
+                            {items.length} {items.length === 1 ? 'task' : 'tasks'}
+                          </Text>
                         </View>
-                      </TouchableOpacity>
-                    ))
-                  ) : (
-                    <View style={styles.emptyState}>
-                      <Text style={[styles.emptyStateIcon]}>📭</Text>
-                      <Text style={[styles.noTasksText, { color: theme.textSecondary }]}>
-                        No watch tasks available
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              )}
-
-              {/* Other Tasks (if any) */}
-              {filteredOtherTasks.length > 0 && (
-                <>
-                  <TouchableOpacity 
-                    style={styles.categoryLabel} 
-                    onPress={() => setOtherExpanded(!otherExpanded)} 
-                    activeOpacity={0.6}
-                  >
-                    <View style={styles.categoryHeader}>
-                      <Text style={styles.categoryIcon}>⭐</Text>
-                      <View style={styles.categoryInfo}>
-                        <Text style={[styles.expandTitle, { color: theme.text }]}>Special Tasks</Text>
-                        <Text style={[styles.taskCount, { color: theme.textSecondary }]}>
-                          {filteredOtherTasks.length} {filteredOtherTasks.length === 1 ? 'task' : 'tasks'}
+                        <Text style={[styles.expandIcon, { color: theme.textSecondary }]}>
+                          {expanded ? '▲' : '▼'}
                         </Text>
                       </View>
-                      <Text style={[styles.expandIcon, { color: theme.textSecondary }]}>
-                        {otherExpanded ? '▲' : '▼'}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                  {otherExpanded && filteredOtherTasks.length > 0 && (
-                    <View style={[styles.divider, { backgroundColor: theme.border }]} />
-                  )}
-                  {otherExpanded && (
-                    <View style={styles.tasksList}>
-                      {filteredOtherTasks.map((task) => (
-                        <TouchableOpacity 
-                          key={task.id} 
-                          style={[
-                            styles.listItem, 
-                            { 
-                              backgroundColor: theme.card, 
-                              borderColor: theme.border,
-                            }
-                          ]}
-                          onPress={() => {
-                            console.log('🎯 Task detail navigation disabled - add screen later:', task.id);
-                          }}
-                          activeOpacity={0.7}
-                          disabled={false}
-                        >
-                          <View style={styles.taskContent}>
-                            <View style={styles.taskInfo}>
-                              <Text style={[
-                                styles.listText, 
-                                { color: task.disabled ? theme.textSecondary : theme.text }
-                              ]}>
-                                {task.title}
-                              </Text>
-                              {task.description && (
-                                <Text style={[styles.taskDesc, { color: theme.textSecondary }]} numberOfLines={2}>
-                                  {task.description}
+                    </TouchableOpacity>
+                    {expanded && <View style={[styles.divider, { backgroundColor: theme.border }]} />}
+                    {expanded && (
+                      <View style={styles.tasksList}>
+                        {items.map((task) => (
+                          <TouchableOpacity
+                            key={task.id}
+                            style={[
+                              styles.listItem,
+                              {
+                                backgroundColor: theme.card,
+                                borderColor: theme.border,
+                              }
+                            ]}
+                            onPress={() => navigation.navigate('TaskDetail', { taskId: task.id })}
+                            activeOpacity={0.7}
+                            disabled={task.disabled}
+                          >
+                            <View style={styles.taskContent}>
+                              <View style={styles.taskInfo}>
+                                <Text style={[
+                                  styles.listText,
+                                  { color: task.disabled ? theme.textSecondary : theme.text }
+                                ]}>
+                                  {task.title}
                                 </Text>
-                              )}
-                              {task.has_subtasks && (
-                                <View style={styles.subtaskBadge}>
-                                  <Text style={[styles.subtaskIndicator, { color: theme.primary }]}>
-                                    {task.subtasks?.length || 0} subtasks →
+                                {task.description && (
+                                  <Text style={[styles.taskDesc, { color: theme.textSecondary }]} numberOfLines={3}>
+                                    {task.description}
                                   </Text>
-                                </View>
-                              )}
+                                )}
+                                {task.has_subtasks && (
+                                  <View style={styles.subtaskBadge}>
+                                    <Text style={[styles.subtaskIndicator, { color: theme.primary }]}>
+                                      {task.subtasks?.length || 0} subtasks →
+                                    </Text>
+                                  </View>
+                                )}
+                              </View>
+                              <View style={[styles.rewardBadge, { backgroundColor: theme.primary + '15' }]}>
+                                <Text style={[
+                                  styles.rewardText,
+                                  { color: task.disabled ? theme.textSecondary : theme.primary }
+                                ]}>
+                                  +{task.reward_points}
+                                </Text>
+                              </View>
                             </View>
-                            <View style={[styles.rewardBadge, { backgroundColor: theme.primary + '15' }]}>
-                              <Text style={[
-                                styles.rewardText, 
-                                { color: task.disabled ? theme.textSecondary : theme.primary }
-                              ]}>
-                                +{task.reward_points}
-                              </Text>
-                            </View>
-                          </View>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  )}
-                </>
-              )}
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </>
           )}
 

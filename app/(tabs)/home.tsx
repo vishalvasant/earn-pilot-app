@@ -14,7 +14,7 @@ import {
   Alert
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../hooks/useTheme';
 import { api, getAssetBaseUrl } from '../../services/api';
 import { useUserStore } from '../../stores/userStore';
@@ -90,13 +90,15 @@ export default function HomeScreen() {
   const [heroSlides, setHeroSlides] = useState<HeroSlide[]>([]);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const slideScrollRef = useRef<ScrollView>(null);
+  const isFirstFocusRef = useRef(true);
 
-  // Add-On games (Unity) from backend
+  // Add-On games (Unity) from backend – package_name and store_url come from admin API
   type AddOnGame = {
     id: number;
     name: string;
-    package_name?: string;
+    package_name?: string | null;
     slug: string;
+    store_url?: string | null;
     description?: string | null;
     category?: string | null;
     icon_url?: string | null;
@@ -111,6 +113,7 @@ export default function HomeScreen() {
   const [addOnGames, setAddOnGames] = useState<AddOnGame[]>([]);
   const [selectedAddOnGame, setSelectedAddOnGame] = useState<AddOnGame | null>(null);
   const [showAddOnModal, setShowAddOnModal] = useState(false);
+  const [addOnGameInstalled, setAddOnGameInstalled] = useState<boolean | null>(null);
   
   // Use centralized data store
   const { 
@@ -118,6 +121,31 @@ export default function HomeScreen() {
     quizzes: quizCategories, 
     fetchAllInitialData 
   } = useDataStore();
+
+  // Refresh dashboard (points, energy) and profile when screen gains focus (tab switch/return).
+  // Skip on first focus to avoid duplicate API calls with the initialization useEffect below.
+  useFocusEffect(
+    useCallback(() => {
+      if (isFirstFocusRef.current) {
+        isFirstFocusRef.current = false;
+        return;
+      }
+      let cancelled = false;
+      const refresh = async () => {
+        try {
+          const data = await getDashboardDetails();
+          if (!cancelled) setDashboard(data?.data ?? data ?? null);
+          const dataStore = useDataStore.getState();
+          await dataStore.fetchProfile(true);
+          if (!cancelled && dataStore.profile) setProfile(dataStore.profile);
+        } catch (e) {
+          if (!cancelled) console.warn('Focus refresh failed:', e);
+        }
+      };
+      refresh();
+      return () => { cancelled = true; };
+    }, [setProfile])
+  );
 
   // Single initialization effect
   useEffect(() => {
@@ -229,6 +257,21 @@ export default function HomeScreen() {
       console.error('Failed to refresh dashboard:', error);
     }
   }, []);
+
+  // When add-on game modal opens, check if that game's app is installed (by package_name from admin API)
+  useEffect(() => {
+    if (!selectedAddOnGame) {
+      setAddOnGameInstalled(null);
+      return;
+    }
+    const pkg = selectedAddOnGame.package_name?.trim();
+    if (!pkg) {
+      setAddOnGameInstalled(true);
+      return;
+    }
+    setAddOnGameInstalled(null);
+    UnityLauncherService.isAppInstalledByPackage(pkg).then(setAddOnGameInstalled).catch(() => setAddOnGameInstalled(false));
+  }, [selectedAddOnGame?.id, selectedAddOnGame?.package_name]);
 
   // Initialize cooldowns
   useEffect(() => {
@@ -691,14 +734,16 @@ export default function HomeScreen() {
           <>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.xl, marginTop: spacing.lg }}>
               <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>FEATURED TASKS</Text>
-              {/* Navigation disabled - add screen later */}
+              <TouchableOpacity onPress={() => navigation.navigate('Tasks')} activeOpacity={0.7}>
+                <Text style={[styles.seeAllLink, { color: theme.primary }]}>See all</Text>
+              </TouchableOpacity>
             </View>
             <View style={{ paddingHorizontal: spacing.xl, marginBottom: spacing.lg, gap: spacing.md }}>
               {featuredTasks.map((task) => (
                 <TouchableOpacity
                   key={task.id}
                   style={[styles.taskCard, { backgroundColor: theme.card, borderColor: theme.border }]}
-                  onPress={() => console.log('Task detail navigation - add screen later')}
+                  onPress={() => navigation.navigate('TaskDetail', { taskId: task.id })}
                   activeOpacity={0.7}
                 >
                   <View style={{ flex: 1 }}>
@@ -712,7 +757,7 @@ export default function HomeScreen() {
           </>
         )}
 
-        {/* Elite Offerwall */}
+        {/* Elite Offerwall - commented out
         <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>FINTECH OFFERS</Text>
         <LinearGradient
           colors={[theme.card, theme.background]}
@@ -729,6 +774,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
         </LinearGradient>
+        */}
 
         {/* Bottom spacing for fixed banner ad + tab bar */}
         <View style={{ height: 150 }} />
@@ -849,7 +895,7 @@ export default function HomeScreen() {
                   </View>
                 </View>
 
-                {/* Footer buttons */}
+                {/* Footer buttons: Cancel + Download (if app not installed) or Play (if installed) */}
                 <View style={styles.addOnModalFooter}>
                   <TouchableOpacity
                     style={[styles.addOnModalButton, styles.addOnModalCancelButton, { borderColor: theme.border }]}
@@ -864,62 +910,59 @@ export default function HomeScreen() {
                     </Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={[styles.addOnModalButton, styles.addOnModalPlayButton, { backgroundColor: theme.primary }]}
-                    activeOpacity={0.9}
-                    onPress={async () => {
-                      if (!selectedAddOnGame) return;
-                      try {
-                        if (!token || !profile?.id) {
-                          Alert.alert('Authentication Required', 'Please login to play games');
-                          return;
-                        }
-
-                        console.log('[HomeScreen] Launching add-on game from modal', {
-                          gameId: selectedAddOnGame.id,
-                          gameName: selectedAddOnGame.name,
-                          userId: profile.id,
-                          userEmail: profile.email,
-                          hasToken: !!token,
-                          tokenPrefix: token ? token.slice(0, 12) + '...' : null,
-                        });
-
-                        // Optional installation check
-                        try {
-                          const isInstalled = await UnityLauncherService.isUnityGameInstalled();
-                          if (!isInstalled) {
-                            console.warn(
-                              `[HomeScreen] ${selectedAddOnGame.name} installation check failed, attempting launch anyway...`,
-                            );
-                          }
-                        } catch (checkError) {
-                          console.warn('[HomeScreen] Installation check failed:', checkError);
-                        }
-
-                        await UnityLauncherService.launchUnityGame({
-                          authToken: token,
-                          userId: profile.id,
-                          userEmail: profile.email,
-                          gameId: selectedAddOnGame.id,
-                        });
-
-                        console.log('[HomeScreen] Unity launch request sent');
+                  {addOnGameInstalled === false && (selectedAddOnGame.store_url || selectedAddOnGame.package_name) ? (
+                    <TouchableOpacity
+                      style={[styles.addOnModalButton, styles.addOnModalPlayButton, { backgroundColor: theme.primary }]}
+                      activeOpacity={0.9}
+                      onPress={() => {
+                        const url = selectedAddOnGame.store_url?.trim() ||
+                          (selectedAddOnGame.package_name
+                            ? `${APP_CONFIG.ADDON_GAME_STORE_URL}${encodeURIComponent(selectedAddOnGame.package_name.trim())}`
+                            : null);
+                        if (url) Linking.openURL(url).catch((err: any) => console.error('Failed to open store URL:', err));
                         setShowAddOnModal(false);
                         setSelectedAddOnGame(null);
-                      } catch (error: any) {
-                        console.error(`[HomeScreen] Failed to launch ${selectedAddOnGame.name}:`, error);
-                        Alert.alert(
-                          'Launch Failed',
-                          `Failed to launch ${selectedAddOnGame.name}: ${error.message}`,
-                          [{ text: 'OK' }],
-                        );
-                      }
-                    }}
-                  >
-                    <Text style={[styles.addOnModalButtonText, { color: theme.background }]}>
-                      Play
-                    </Text>
-                  </TouchableOpacity>
+                      }}
+                    >
+                      <Text style={[styles.addOnModalButtonText, { color: theme.background }]}>
+                        Download
+                      </Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={[styles.addOnModalButton, styles.addOnModalPlayButton, { backgroundColor: theme.primary }]}
+                      activeOpacity={0.9}
+                      disabled={addOnGameInstalled === null && !!selectedAddOnGame.package_name}
+                      onPress={async () => {
+                        if (!selectedAddOnGame) return;
+                        try {
+                          if (!token || !profile?.id) {
+                            Alert.alert('Authentication Required', 'Please login to play games');
+                            return;
+                          }
+                          await UnityLauncherService.launchUnityGame({
+                            authToken: token,
+                            userId: profile.id,
+                            userEmail: profile.email,
+                            gameId: selectedAddOnGame.id,
+                          });
+                          setShowAddOnModal(false);
+                          setSelectedAddOnGame(null);
+                        } catch (error: any) {
+                          console.error(`[HomeScreen] Failed to launch ${selectedAddOnGame.name}:`, error);
+                          Alert.alert(
+                            'Launch Failed',
+                            `Failed to launch ${selectedAddOnGame.name}: ${error.message}`,
+                            [{ text: 'OK' }],
+                          );
+                        }
+                      }}
+                    >
+                      <Text style={[styles.addOnModalButtonText, { color: theme.background }]}>
+                        {addOnGameInstalled === null && selectedAddOnGame.package_name ? 'Checking...' : 'Play'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </>
             )}
@@ -1038,6 +1081,11 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     textTransform: 'uppercase',
     letterSpacing: 2,
+  },
+  seeAllLink: {
+    fontSize: typography.sm,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   statsGrid: {
     flexDirection: 'row',

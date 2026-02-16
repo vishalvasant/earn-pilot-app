@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -17,8 +17,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../hooks/useTheme';
 import { useAdMob } from '../hooks/useAdMob';
 import Icon from '../components/Icon';
+import FixedBannerAd from '../components/FixedBannerAd';
 import { api } from '../services/api';
 import { useAuthStore } from '../stores/authStore';
+import { useDataStore } from '../stores/dataStore';
+import { useUserStore } from '../stores/userStore';
 import ThemedPopup from '../components/ThemedPopup';
 
 const { width, height } = Dimensions.get('window');
@@ -52,7 +55,7 @@ export default function TaskDetailScreen() {
   const navigation = useNavigation();
   const { taskId } = route.params || {};
   const theme = useTheme();
-  const { showInterstitial } = useAdMob();
+  const { showInterstitial, shouldShowBanner, getBannerAdId } = useAdMob();
   
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,6 +63,8 @@ export default function TaskDetailScreen() {
   const [showingAd, setShowingAd] = useState(false);
   const [webViewKey, setWebViewKey] = useState(0);
   const [completingSubtask, setCompletingSubtask] = useState<number | null>(null);
+  const [completeButtonEnabled, setCompleteButtonEnabled] = useState(false);
+  const completeDelayRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [popupVisible, setPopupVisible] = useState(false);
   const [popupConfig, setPopupConfig] = useState({
     title: '',
@@ -92,6 +97,31 @@ export default function TaskDetailScreen() {
     return () => backHandler.remove();
   }, [activeSubtask, showingAd]);
 
+  // When user opens a subtask (task detail WebView), keep Complete disabled for a random 5–15s so they must engage before completing
+  useEffect(() => {
+    if (!activeSubtask) {
+      setCompleteButtonEnabled(false);
+      if (completeDelayRef.current) {
+        clearTimeout(completeDelayRef.current);
+        completeDelayRef.current = null;
+      }
+      return;
+    }
+    setCompleteButtonEnabled(false);
+    if (completeDelayRef.current) clearTimeout(completeDelayRef.current);
+    const delayMs = 5000 + Math.floor(Math.random() * 10000); // 5–15 seconds
+    completeDelayRef.current = setTimeout(() => {
+      completeDelayRef.current = null;
+      setCompleteButtonEnabled(true);
+    }, delayMs);
+    return () => {
+      if (completeDelayRef.current) {
+        clearTimeout(completeDelayRef.current);
+        completeDelayRef.current = null;
+      }
+    };
+  }, [activeSubtask?.id]);
+
   const fetchTaskDetail = async () => {
     try {
       setLoading(true);
@@ -109,7 +139,8 @@ export default function TaskDetailScreen() {
   };
 
   const handleSubtaskComplete = async (subtask: Subtask) => {
-    if (subtask.status === 'completed') {
+    // Allow completing again if parent task is repeatable and not disabled (per-day)
+    if (subtask.status === 'completed' && !(task?.is_repeatable && !task?.disabled)) {
       showPopup('Already Completed', 'You have already completed this subtask.');
       return;
     }
@@ -137,6 +168,15 @@ export default function TaskDetailScreen() {
           `You earned ${subtask.reward_points} points for completing "${subtask.title}"`
         );
         
+        // Refresh profile so points and balances update across the app
+        try {
+          await useDataStore.getState().fetchProfile(true);
+          const updatedProfile = useDataStore.getState().profile;
+          useUserStore.getState().setProfile(updatedProfile);
+        } catch (e) {
+          // ignore profile refresh errors
+        }
+
         setActiveSubtask(null);
       }
     } catch (error: any) {
@@ -151,7 +191,8 @@ export default function TaskDetailScreen() {
   };
 
   const openSubtask = async (subtask: Subtask) => {
-    if (subtask.status === 'completed') {
+    // Allow reopening completed subtasks if the parent task is repeatable and not disabled
+    if (subtask.status === 'completed' && !(task?.is_repeatable && !task?.disabled)) {
       showPopup('Already Completed', 'You have already completed this subtask.');
       return;
     }
@@ -171,50 +212,6 @@ export default function TaskDetailScreen() {
 
   const closeSubtask = () => {
     setActiveSubtask(null);
-  };
-
-  const handleStartTask = async () => {
-    if (!task) return;
-    
-    try {
-      const response = await api.post(`/tasks/${task.id}/start`);
-      if (response.data.success) {
-        showPopup('Task Started', response.data.message || 'Task started successfully!');
-        // Refresh task data
-        fetchTaskDetail();
-      }
-    } catch (error: any) {
-      console.error('Error starting task:', error);
-      showPopup(
-        'Error',
-        error.response?.data?.message || 'Failed to start task'
-      );
-    }
-  };
-
-  const handleCompleteTask = async () => {
-    if (!task) return;
-    
-    try {
-      // Show interstitial ad before completing task
-      try { await showInterstitial(); } catch {}
-      
-      const response = await api.post(`/tasks/${task.id}/complete`);
-      if (response.data.success) {
-        showPopup(
-          'Task Completed!',
-          `You earned ${response.data.points} points!`
-        );
-        // Refresh task data
-        fetchTaskDetail();
-      }
-    } catch (error: any) {
-      console.error('Error completing task:', error);
-      showPopup(
-        'Error',
-        error.response?.data?.message || 'Failed to complete task'
-      );
-    }
   };
 
   const styles = createStyles(theme);
@@ -271,13 +268,15 @@ export default function TaskDetailScreen() {
             style={[
               styles.completeButton,
               { backgroundColor: theme.success },
-              completingSubtask === activeSubtask.id && styles.disabledButton
+              (!completeButtonEnabled || completingSubtask === activeSubtask.id) && styles.disabledButton
             ]}
             onPress={() => handleSubtaskComplete(activeSubtask)}
-            disabled={completingSubtask === activeSubtask.id}
+            disabled={!completeButtonEnabled || completingSubtask === activeSubtask.id}
           >
             {completingSubtask === activeSubtask.id ? (
               <ActivityIndicator size="small" color="#ffffff" />
+            ) : !completeButtonEnabled ? (
+              <Text style={styles.completeButtonText}>Complete (wait...)</Text>
             ) : (
               <>
                 <Icon name="checkmark" size={16} color="#ffffff" />
@@ -309,7 +308,11 @@ export default function TaskDetailScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: shouldShowBanner ? 100 : 24 }}
+      >
         {/* Header */}
         <View style={styles.topHeader}>
           <TouchableOpacity
@@ -332,15 +335,10 @@ export default function TaskDetailScreen() {
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         >
-          <View style={{ gap: 15 }}>
-            <View style={{ gap: 8 }}>
-              <Text style={[styles.taskTitle, { color: task.status === 'completed' ? theme.success : '#ffffff' }]}>
-                {task.title}
-              </Text>
-              <Text style={[styles.taskDesc, { color: task.status === 'completed' ? theme.success + 'CC' : 'rgba(255, 255, 255, 0.85)' }]}>
-                {task.description}
-              </Text>
-            </View>
+          <View style={{ gap: 12 }}>
+            <Text style={[styles.taskTitle, { color: task.status === 'completed' ? theme.success : '#ffffff' }]}>
+              {task.title}
+            </Text>
 
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <View style={{ gap: 4 }}>
@@ -371,6 +369,18 @@ export default function TaskDetailScreen() {
           </View>
         </LinearGradient>
 
+        {/* Full Description Section - shows entire admin description */}
+        {task.description && task.description.trim() !== '' && (
+          <View style={{ paddingHorizontal: 20, marginTop: 8, marginBottom: 8 }}>
+            <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Description</Text>
+            <View style={[styles.descriptionCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <Text style={[styles.descriptionText, { color: theme.text }]} selectable>
+                {task.description}
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* Task Info Section */}
         <View style={{ paddingHorizontal: 20, marginTop: 25, gap: 15 }}>
           <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Task Info</Text>
@@ -386,7 +396,11 @@ export default function TaskDetailScreen() {
             <View style={styles.infoRow}>
               <Text style={[styles.infoLabel, { color: theme.textSecondary }]}>Status</Text>
               <Text style={[styles.infoValue, { color: task.status === 'completed' ? theme.success : theme.primary }]}>
-                {task.status === 'completed' ? '✓ Completed' : '◉ Available'}
+                {task.disabled && task.is_repeatable && task.daily_limit > 0
+                  ? 'Daily limit reached'
+                  : task.status === 'completed'
+                    ? '✓ Completed'
+                    : '◉ Available'}
               </Text>
             </View>
           </View>
@@ -431,12 +445,12 @@ export default function TaskDetailScreen() {
                     }
                   ]}
                   onPress={() => {
-                    if (subtask.status !== 'completed') {
+                    if (subtask.status !== 'completed' || (task?.is_repeatable && !task?.disabled)) {
                       openSubtask(subtask);
                     }
                   }}
-                  disabled={subtask.status === 'completed'}
-                  activeOpacity={subtask.status === 'completed' ? 1 : 0.7}
+                  disabled={!(subtask.status !== 'completed' || (task?.is_repeatable && !task?.disabled))}
+                  activeOpacity={(subtask.status !== 'completed' || (task?.is_repeatable && !task?.disabled)) ? 0.7 : 1}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 15, flex: 1 }}>
                     <View style={[styles.subtaskNumber, { backgroundColor: subtask.status === 'completed' ? theme.success : theme.primary, borderColor: subtask.status === 'completed' ? theme.success : theme.primary }]}>
@@ -452,7 +466,7 @@ export default function TaskDetailScreen() {
                         {subtask.title}
                       </Text>
                       {subtask.description && (
-                        <Text style={[styles.subtaskDesc, { color: theme.textSecondary }]} numberOfLines={2}>
+                        <Text style={[styles.subtaskDesc, { color: theme.textSecondary }]}>
                           {subtask.description}
                         </Text>
                       )}
@@ -475,68 +489,6 @@ export default function TaskDetailScreen() {
           </View>
         )}
 
-        {/* Action Buttons */}
-        {!task.has_subtasks && task.status !== 'completed' && (
-          <View style={{ paddingHorizontal: 20, marginTop: 20, marginBottom: 20, gap: 12 }}>
-            {task.energy_cost > 0 && task.status !== 'in_progress' && (
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: theme.primary }]}
-                onPress={handleStartTask}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.actionButtonText}>
-                  Start Task ({task.energy_cost} energy)
-                </Text>
-              </TouchableOpacity>
-            )}
-            {(task.status === 'in_progress' || task.energy_cost === 0) && (
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: theme.success }]}
-                onPress={handleCompleteTask}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.actionButtonText}>
-                  Complete Task (+{task.reward_points} points)
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-
-        {task.has_subtasks && task.status !== 'completed' && (
-          <View style={{ paddingHorizontal: 20, marginTop: 20, marginBottom: 20 }}>
-            {task.energy_cost > 0 && task.status !== 'in_progress' && (
-              <TouchableOpacity
-                style={[styles.actionButton, { backgroundColor: theme.primary }]}
-                onPress={handleStartTask}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.actionButtonText}>
-                  Start Task ({task.energy_cost} energy)
-                </Text>
-              </TouchableOpacity>
-            )}
-            {task.status === 'in_progress' && (
-              <View style={{ gap: 12 }}>
-                <Text style={[styles.sectionLabel, { color: theme.textSecondary, textAlign: 'center' }]}>
-                  Complete all required subtasks to finish
-                </Text>
-                {task.subtasks.filter(st => st.is_required).every(st => st.status === 'completed') && (
-                  <TouchableOpacity
-                    style={[styles.actionButton, { backgroundColor: theme.success }]}
-                    onPress={handleCompleteTask}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.actionButtonText}>
-                      Complete Task (+{task.reward_points} points)
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
-          </View>
-        )}
-
         <View style={{ height: 60 }} />
       </ScrollView>
 
@@ -545,6 +497,12 @@ export default function TaskDetailScreen() {
         title={popupConfig.title}
         message={popupConfig.message}
         onClose={() => setPopupVisible(false)}
+      />
+
+      <FixedBannerAd
+        shouldShowBanner={shouldShowBanner}
+        getBannerAdId={getBannerAdId}
+        backgroundColor={theme.background}
       />
     </SafeAreaView>
   );
@@ -617,6 +575,17 @@ const createStyles = (theme: any) => StyleSheet.create({
     lineHeight: 22,
     fontWeight: '400',
   },
+  descriptionCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 18,
+    marginTop: 10,
+  },
+  descriptionText: {
+    fontSize: 15,
+    lineHeight: 24,
+    fontWeight: '400',
+  },
   sectionLabel: {
     fontSize: 11,
     fontWeight: '800',
@@ -670,7 +639,7 @@ const createStyles = (theme: any) => StyleSheet.create({
     padding: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   subtaskNumber: {
     width: 36,
@@ -688,7 +657,8 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   subtaskDesc: {
     fontSize: 13,
-    lineHeight: 18,
+    lineHeight: 20,
+    marginTop: 4,
   },
   subtaskPoints: {
     fontSize: 16,

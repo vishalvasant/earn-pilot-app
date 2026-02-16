@@ -97,4 +97,22 @@ export class UnityLauncherService {
       return false;
     }
   }
+
+  /**
+   * Check if an app is installed by package name (from admin add-on game config).
+   */
+  static async isAppInstalledByPackage(packageName: string): Promise<boolean> {
+    if (Platform.OS !== 'android' || !packageName?.trim()) {
+      return false;
+    }
+    if (!EarnPilotUnity || typeof EarnPilotUnity.isAppInstalled !== 'function') {
+      return false;
+    }
+    try {
+      return await EarnPilotUnity.isAppInstalled(packageName.trim());
+    } catch (error) {
+      console.error('[UnityLauncher] Failed to check app by package:', error);
+      return false;
+    }
+  }
 }

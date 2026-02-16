@@ -22,8 +22,8 @@ export const Icons = {
   coins: { family: FontAwesome5, name: 'coins' },
   coin: '🪙', // Coin emoji for reward points
   
-  // Status & Progress
-  checkmark: { family: Ionicons, name: 'checkmark-circle' },
+  // Status & Progress (checkmark as emoji for reliable display)
+  checkmark: '✓',
   pending: { family: MaterialIcons, name: 'hourglass-empty' },
   target: { family: MaterialCommunityIcons, name: 'target' },
   trophy: { family: Ionicons, name: 'trophy' },
@@ -46,11 +46,11 @@ export const Icons = {
   time: { family: Ionicons, name: 'time' },
   calendar: { family: Ionicons, name: 'calendar' },
   
-  // UI Elements
+  // UI Elements (emoji so they render even when vector fonts fail to load)
   arrowRight: { family: Ionicons, name: 'chevron-forward' },
-  arrowLeft: { family: Ionicons, name: 'chevron-back' },
+  arrowLeft: '←',
   close: { family: Ionicons, name: 'close' },
-  info: { family: Ionicons, name: 'information-circle' },
+  info: 'ℹ️',
   
   // Activities
   activity: { family: MaterialCommunityIcons, name: 'chart-line' },

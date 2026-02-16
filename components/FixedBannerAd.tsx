@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, memo } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 
 // Safely import BannerAd
@@ -20,11 +20,14 @@ interface FixedBannerAdProps {
   backgroundColor?: string;
 }
 
-export default function FixedBannerAd({ shouldShowBanner, getBannerAdId, backgroundColor = '#111721' }: FixedBannerAdProps) {
+function FixedBannerAd({ shouldShowBanner, getBannerAdId, backgroundColor = '#111721' }: FixedBannerAdProps) {
   // Tab bar is 65px high + 15px margin from bottom = 80px
   // Banner will be positioned just above the tab bar
   const BANNER_HEIGHT = 50;
   const TAB_BAR_TOTAL_HEIGHT = 80;
+
+  // Memoize unitId so we don't call getBannerAdId() on every render (stops ad reload + log spam)
+  const unitId = useMemo(() => getBannerAdId(), [getBannerAdId]);
 
   return (
     <View 
@@ -39,7 +42,7 @@ export default function FixedBannerAd({ shouldShowBanner, getBannerAdId, backgro
     >
       {shouldShowBanner && BannerAd ? (
         <BannerAd
-          unitId={getBannerAdId()}
+          unitId={unitId}
           size={BannerAdSize.BANNER}
         />
       ) : !BannerAd ? (
@@ -52,6 +55,8 @@ export default function FixedBannerAd({ shouldShowBanner, getBannerAdId, backgro
     </View>
   );
 }
+
+export default memo(FixedBannerAd);
 
 const styles = StyleSheet.create({
   bannerContainer: {

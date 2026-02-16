@@ -14,6 +14,7 @@ import {
   Dimensions
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../hooks/useTheme';
 import { api } from '../../services/api';
 import { useAdMob } from '../../hooks/useAdMob';
@@ -36,15 +37,14 @@ const { height: screenHeight } = Dimensions.get('window');
 const HEADER_HEIGHT = screenHeight * 0.30; // 30% of screen height
 
 export default function WalletScreen() {
+  const navigation = useNavigation();
   const theme = useTheme();
   const styles = createStyles(theme);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const balanceAnim = useRef(new Animated.Value(0)).current;
   
-  // AdMob hooks
-  const { showRewarded, getRemainingRewardedAds, getRewardedAdBonus, shouldShowBanner, getBannerAdId } = useAdMob();
-  const [loadingRewardedAd, setLoadingRewardedAd] = useState(false);
+  const { shouldShowBanner, getBannerAdId } = useAdMob();
   
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -55,12 +55,7 @@ export default function WalletScreen() {
     total_withdrawn: 0,
   });
   const [transactions, setTransactions] = useState<any[]>([]);
-  const [withdrawalMethods, setWithdrawalMethods] = useState<any[]>([]);
-  
-  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
-  const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [selectedMethod, setSelectedMethod] = useState<any>(null);
-  const [paymentDetails, setPaymentDetails] = useState('');
+  const [earnedVouchers, setEarnedVouchers] = useState<any[]>([]);
   const [popup, setPopup] = useState<{ visible: boolean; title: string; message: string; onConfirm?: () => void } | null>(null);
   
   // Energy conversion state
@@ -68,6 +63,8 @@ export default function WalletScreen() {
   const [energyAmount, setEnergyAmount] = useState('');
   const [conversionRate, setConversionRate] = useState({ rate: 10, minRequired: 50, enabled: true });
   const [convertingEnergy, setConvertingEnergy] = useState(false);
+  const lastWalletFetchRef = useRef(0);
+  const FOCUS_CACHE_MS = 15000; // Skip refetch if we loaded within last 15s (e.g. rapid tab switch)
 
   const showPopup = (title: string, message: string) => {
     setPopup({
@@ -78,10 +75,16 @@ export default function WalletScreen() {
     });
   };
 
+  // Reload wallet data when screen gains focus; skip if we loaded recently (avoid duplicate calls on rapid tab switch)
+  useFocusEffect(
+    React.useCallback(() => {
+      if (Date.now() - lastWalletFetchRef.current < FOCUS_CACHE_MS) return;
+      loadWalletData();
+    }, [])
+  );
+
   useEffect(() => {
-    loadWalletData();
-    
-    // Entrance animation
+    // Entrance animation only (data loaded by useFocusEffect)
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -108,10 +111,10 @@ export default function WalletScreen() {
   const loadWalletData = async () => {
     try {
       setLoading(true);
-      const [balanceRes, activityRes, methodsRes] = await Promise.all([
+      const [balanceRes, activityRes, vouchersRes] = await Promise.all([
         api.get('/wallet/balance'),
         api.get('/wallet/activity'),
-        api.get('/wallet/withdrawal-methods'),
+        api.get('/wallet/earned-vouchers').catch(() => ({ data: { data: [] } })),
       ]);
 
       let conversionRateData = { rate: 10, minRequired: 50, enabled: true };
@@ -123,14 +126,14 @@ export default function WalletScreen() {
           enabled: conversionRes.data?.data?.conversion_enabled !== false
         };
       } catch (err: any) {
-        // If 404 or any error, use default
         console.warn('Conversion rate API failed, using default value 10');
       }
 
       setWalletData(balanceRes.data?.data || { balance: 0, energy_points: 0, pending_amount: 0, total_withdrawn: 0 });
       setTransactions(activityRes.data?.data || []);
-      setWithdrawalMethods(methodsRes.data?.data || []);
+      setEarnedVouchers(vouchersRes.data?.data || []);
       setConversionRate(conversionRateData);
+      lastWalletFetchRef.current = Date.now();
     } catch (error) {
       console.error('Failed to load wallet data:', error);
       showPopup('Error', 'Failed to load wallet data. Please try again.');
@@ -176,47 +179,6 @@ export default function WalletScreen() {
         {children}
       </Animated.View>
     );
-  };
-
-  const handleWithdraw = async () => {
-    if (!selectedMethod) {
-      showPopup('Error', 'Please select a withdrawal method');
-      return;
-    }
-    if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) {
-      showPopup('Error', 'Please enter a valid amount');
-      return;
-    }
-    if (parseFloat(withdrawAmount) < selectedMethod.min_amount) {
-      showPopup('Error', `Minimum withdrawal amount for ${selectedMethod.name} is  ${selectedMethod.min_amount}`);
-      return;
-    }
-    if (parseFloat(withdrawAmount) > walletData.balance) {
-      showPopup('Error', 'Insufficient balance');
-      return;
-    }
-    if (!paymentDetails.trim()) {
-      showPopup('Error', 'Please enter payment details');
-      return;
-    }
-
-    try {
-      const res = await api.post('/wallet/withdraw', {
-        amount: parseFloat(withdrawAmount),
-        method: selectedMethod.key,
-        payment_details: paymentDetails,
-      });
-
-      showPopup('Success! 🎉', res.data.message || 'Withdrawal request submitted successfully!');
-      setShowWithdrawModal(false);
-      setWithdrawAmount('');
-      setSelectedMethod(null);
-      setPaymentDetails('');
-      await loadWalletData(); // Reload wallet data
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.message || 'Failed to process withdrawal';
-      showPopup('Error', errorMsg);
-    }
   };
 
   const handleEnergyConversion = async () => {
@@ -331,21 +293,36 @@ export default function WalletScreen() {
 
           <TouchableOpacity
             style={[styles.listItem, styles.listItemAccent, { borderColor: theme.primary, backgroundColor: theme.primary + '15' }]}
-            onPress={() => setShowWithdrawModal(true)}
+            onPress={() => (navigation as any).navigate('Withdraw')}
             activeOpacity={0.8}
           >
             <View style={{ flex: 1 }}>
               <Text style={[styles.listItemText, { color: theme.text }]}>Withdrawal Hub</Text>
-              <Text style={[styles.listItemDesc, { color: theme.textSecondary }]}>Withdraw your earnings</Text>
+              <Text style={[styles.listItemDesc, { color: theme.textSecondary }]}>Cash or vouchers – request withdraw</Text>
             </View>
             <Text style={{ color: theme.primary, fontWeight: '800', fontSize: 12, textTransform: 'uppercase' }}>REDEEM</Text>
           </TouchableOpacity>
-
-          <View style={[styles.listItem, { borderColor: theme.border, backgroundColor: theme.card }]}>
-            <Text style={[styles.listItemText, { color: theme.text }]}>Reward Statement</Text>
-            <Text style={{ color: theme.textSecondary }}>View ❯</Text>
-          </View>
         </View>
+
+        {/* Earned Vouchers */}
+        {earnedVouchers.length > 0 && (
+          <View style={{ paddingHorizontal: 20, marginTop: 24, gap: 15 }}>
+            <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Earned Vouchers</Text>
+            {earnedVouchers.slice(0, 5).map((v: any) => (
+              <View key={v.id} style={[styles.listItem, { borderColor: theme.border, backgroundColor: theme.card }]}>
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text style={[styles.listItemText, { color: theme.text }]}>{v.title || 'Voucher'}</Text>
+                  <Text style={[styles.listItemDesc, { color: theme.textSecondary }]}>
+                    {v.voucher_code ? `Code: ${v.voucher_code}` : ''} {v.expiry_date ? `• Expires ${v.expiry_date}` : ''}
+                  </Text>
+                </View>
+                <Text style={{ color: v.status === 'active' ? theme.success : theme.textSecondary, fontSize: 12, fontWeight: '600' }}>
+                  {v.status === 'active' ? 'Active' : 'Redeemed'}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* Stats Section */}
         <View style={{ paddingHorizontal: 20, marginTop: 30, gap: 15 }}>
@@ -365,32 +342,6 @@ export default function WalletScreen() {
             </View>
           </View>
         </View>
-
-        {/* Withdrawal Methods */}
-        {withdrawalMethods.length > 0 && (
-          <View style={{ paddingHorizontal: 20, marginTop: 30, marginBottom: 20, gap: 15 }}>
-            <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Withdrawal Methods</Text>
-
-            {withdrawalMethods.map((method: any, index: number) => (
-              <View
-                key={index}
-                style={[styles.methodCard, { backgroundColor: theme.card, borderColor: theme.border }]}
-              >
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-                  <View style={{ flex: 1, gap: 4 }}>
-                    <Text style={[styles.methodName, { color: theme.text }]}>{method.name}</Text>
-                    <Text style={[styles.methodDesc, { color: theme.textSecondary }]}>
-                      Min:  {method.min_amount} • {method.processing_time}
-                    </Text>
-                  </View>
-                  <Text style={{ fontSize: 20 }}>
-                    {method.icon || (method.name.includes('Bank') ? '🏦' : method.name.includes('Wallet') ? '💳' : '💰')}
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
 
         {/* Recent Transactions */}
         {transactions.length > 0 && (
@@ -423,93 +374,6 @@ export default function WalletScreen() {
 
         <View style={{ height: 150 }} />
       </ScrollView>
-
-      {/* Withdrawal Modal */}
-      <Modal
-        visible={showWithdrawModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowWithdrawModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>Withdraw Money</Text>
-            
-            <View style={styles.modalSection}>
-              <Text style={[styles.modalLabel, { color: theme.text }]}>Amount</Text>
-              <TextInput
-                style={[styles.modalInput, { borderColor: theme.border, color: theme.text, backgroundColor: theme.background }]}
-                placeholder="Enter amount"
-                placeholderTextColor={theme.placeholder}
-                value={withdrawAmount}
-                onChangeText={setWithdrawAmount}
-                keyboardType="numeric"
-              />
-            </View>
-
-            <View style={styles.modalSection}>
-              <Text style={[styles.modalLabel, { color: theme.text }]}>Withdrawal Method</Text>
-              {withdrawalMethods.map((method: any, index: number) => (
-                <TouchableOpacity
-                  key={index}
-                  style={[
-                    styles.modalMethodItem,
-                    { 
-                      borderColor: selectedMethod?.key === method.key ? theme.primary : theme.border,
-                      backgroundColor: selectedMethod?.key === method.key ? theme.primary + '10' : theme.background
-                    }
-                  ]}
-                  onPress={() => setSelectedMethod(method)}
-                >
-                  <Text style={styles.modalMethodIcon}>{method.icon || '💰'}</Text>
-                  <View>
-                    <Text style={[styles.modalMethodName, { color: theme.text }]}>{method.name}</Text>
-                    <Text style={{ color: theme.textSecondary, fontSize: 11 }}>
-                      Min  {method.min_amount}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={styles.modalSection}>
-              <Text style={[styles.modalLabel, { color: theme.text }]}>
-                {selectedMethod?.key === 'upi' ? 'UPI ID' : 
-                 selectedMethod?.key === 'bank_transfer' ? 'Bank Details (Acc No/IFSC)' : 
-                 'Voucher Details'}
-              </Text>
-              <TextInput
-                style={[styles.modalInput, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
-                placeholder={selectedMethod?.key === 'upi' ? 'example@upi' : 'Enter details'}
-                placeholderTextColor={theme.placeholder}
-                value={paymentDetails}
-                onChangeText={setPaymentDetails}
-              />
-            </View>
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity 
-                style={[styles.modalButton, styles.cancelButton, { borderColor: theme.border }]}
-                onPress={() => setShowWithdrawModal(false)}
-              >
-                <Text style={[styles.cancelButtonText, { color: theme.textSecondary }]}>Cancel</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.modalButton}
-                onPress={handleWithdraw}
-              >
-                <LinearGradient
-                  colors={theme.gradient.primary as [string, string, ...string[]]}
-                  style={styles.confirmButton}
-                >
-                  <Text style={styles.confirmButtonText}>Withdraw</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       {/* Energy Conversion Modal */}
       <Modal

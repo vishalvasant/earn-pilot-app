@@ -145,3 +145,14 @@ export const logout = async () => {
   const response = await api.post('/logout');
   return response.data;
 };
+
+/**
+ * Submit referral code (optional; for new Google users). Requires auth.
+ */
+export const submitReferralCode = async (referralCode?: string) => {
+  const response = await api.post<{ success: boolean; message: string; user: any }>(
+    '/auth/referral-code',
+    referralCode != null && referralCode.trim() !== '' ? { referral_code: referralCode.trim() } : {}
+  );
+  return response.data;
+};

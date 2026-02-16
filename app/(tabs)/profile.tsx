@@ -13,21 +13,25 @@ import {
   Linking,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { getProfile } from '../../services/api';
 import { useTheme } from '../../hooks/useTheme';
 import { useAuthStore } from '../../stores/authStore';
 import { useUserStore } from '../../stores/userStore';
+import { useDataStore } from '../../stores/dataStore';
 import ThemedPopup from '../../components/ThemedPopup';
 import { useAdMob } from '../../hooks/useAdMob';
 import FixedBannerAd from '../../components/FixedBannerAd';
+import Clipboard from '@react-native-clipboard/clipboard';
+import { Share } from 'react-native';
+import { APP_CONFIG } from '../../config/app';
 
 function ProfileScreen() {
   const theme = useTheme();
   const navigation = useNavigation();
   const { shouldShowBanner, getBannerAdId } = useAdMob();
   const logout = useAuthStore((s) => s.logout);
-  const userStore = useUserStore();
+  const setProfileInStore = useUserStore((s) => s.setProfile);
 
   const [user, setUser] = useState<any | null>(null);
   const [name, setName] = useState('');
@@ -39,27 +43,72 @@ function ProfileScreen() {
   const styles = useMemo(() => createStyles(theme), [theme]);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
+  const lastProfileFetchRef = useRef(0);
+  const FOCUS_CACHE_MS = 15000;
 
   const loadProfile = useCallback(async () => {
     try {
       const data = await getProfile();
       const u = (data && (data.user || data.data?.user || data)) || {};
       setUser(u);
-      userStore.setProfile(u);
+      setProfileInStore(u);
       setName((u.name as string) || 'User');
+      lastProfileFetchRef.current = Date.now();
     } catch (error) {
       setUser(null);
       setName('User');
     }
-  }, [userStore]);
+  }, [setProfileInStore]);
+
+  // Reload profile when screen gains focus; use dataStore cache if fresh (e.g. already loaded on Home), else skip if we loaded recently
+  useFocusEffect(
+    useCallback(() => {
+      const state = useDataStore.getState();
+      const cacheMs = 30 * 1000;
+      if (state.profile?.id && state.profileLastFetched != null && Date.now() - state.profileLastFetched < cacheMs) {
+        setUser(state.profile);
+        useUserStore.getState().setProfile(state.profile);
+        setName((state.profile.name as string) || 'User');
+        lastProfileFetchRef.current = Date.now();
+        return;
+      }
+      if (Date.now() - lastProfileFetchRef.current < FOCUS_CACHE_MS) return;
+      loadProfile();
+    }, [loadProfile])
+  );
 
   useEffect(() => {
-    loadProfile();
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
       Animated.timing(slideAnim, { toValue: 0, duration: 600, useNativeDriver: true }),
     ]).start();
   }, []);
+
+  const referralMessage = (code: string) =>
+    `Join Earn Pilot and use my referral code: ${code}\n${APP_CONFIG.PLAY_STORE_APP_URL}`;
+
+  const handleCopyReferral = (code?: string) => {
+    if (!code) {
+      setPopup({ visible: true, title: 'No code', message: 'No referral code available', onConfirm: () => setPopup(null) });
+      return;
+    }
+    Clipboard.setString(referralMessage(code));
+    setPopup({ visible: true, title: 'Copied', message: 'Referral message with app link copied to clipboard', onConfirm: () => setPopup(null) });
+  };
+
+  const handleShareReferral = async (code?: string) => {
+    if (!code) {
+      setPopup({ visible: true, title: 'No code', message: 'No referral code available', onConfirm: () => setPopup(null) });
+      return;
+    }
+    try {
+      await Share.share({
+        message: referralMessage(code),
+      });
+    } catch (e) {
+      setPopup({ visible: true, title: 'Error', message: 'Failed to open share dialog', onConfirm: () => setPopup(null) });
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -94,6 +143,23 @@ function ProfileScreen() {
             <Text style={[styles.centerName, { color: theme.text }]}>{name || 'User'}</Text>
             <Text style={[styles.centerPoints, { color: theme.primary }]}>💎 {user?.points_balance ?? 0} Points</Text>
           </View>
+
+        {/* Referral Code */}
+        <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Referral</Text>
+        <View style={[styles.listItem, { borderColor: theme.border, backgroundColor: theme.card }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.listItemText, { color: theme.text }]}>Your Referral Code</Text>
+            <Text style={{ color: theme.textSecondary, marginTop: 6, fontWeight: '700' }}>{user?.referral_code ?? '—'}</Text>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity style={{ marginRight: 8 }} onPress={() => handleCopyReferral(user?.referral_code)}>
+              <Text style={{ color: theme.primary, fontWeight: '700' }}>Copy</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => handleShareReferral(user?.referral_code)}>
+              <Text style={{ color: theme.primary, fontWeight: '700' }}>Share</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
         </Animated.View>
 
         {/* <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Wallet</Text>
@@ -148,7 +214,7 @@ function ProfileScreen() {
             </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.listItem, { borderColor: '#1e293b', backgroundColor: '#0a0e17', marginTop: 5 }]}
-              onPress={() => Linking.openURL('https://networks11.com/term-conditions')}
+              onPress={() => Linking.openURL('https://networks11.com/terms-conditions')}
             > 
               <Text style={[styles.listItemText, { color: theme.text }]}>Terms & Conditions</Text>
               <Text style={{ color: theme.textSecondary }}>❯</Text>
