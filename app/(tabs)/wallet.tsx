@@ -22,7 +22,7 @@ import Icon from '../../components/Icon';
 import ThemedPopup from '../../components/ThemedPopup';
 import FixedBannerAd from '../../components/FixedBannerAd';
 
-// Safely import BannerAd - may not be available in Expo Go
+// Safely import BannerAd - may not be available when native module is not loaded
 let BannerAd: any = null;
 let BannerAdSize: any = null;
 try {
@@ -30,7 +30,7 @@ try {
   BannerAd = admobModule.BannerAd;
   BannerAdSize = admobModule.BannerAdSize;
 } catch (e) {
-  // AdMob not available in Expo Go
+  // AdMob native module not available
 }
 
 const { height: screenHeight } = Dimensions.get('window');
@@ -44,7 +44,7 @@ export default function WalletScreen() {
   const slideAnim = useRef(new Animated.Value(50)).current;
   const balanceAnim = useRef(new Animated.Value(0)).current;
   
-  const { shouldShowBanner, getBannerAdId } = useAdMob();
+  const { shouldShowBanner, getBannerAdId, getAdRequestOptions } = useAdMob();
   
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -456,6 +456,7 @@ export default function WalletScreen() {
       <FixedBannerAd
         shouldShowBanner={shouldShowBanner}
         getBannerAdId={getBannerAdId}
+        requestOptions={getAdRequestOptions()}
         backgroundColor={theme.background}
       />
     </SafeAreaView>

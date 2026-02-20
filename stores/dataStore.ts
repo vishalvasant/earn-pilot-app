@@ -81,13 +81,13 @@ export const useDataStore = create<DataState>((set, get) => ({
     
     // Check cache if not forcing
     if (!force && state.tasksLastFetched && (now - state.tasksLastFetched) < CACHE_DURATION) {
-      console.log('📦 Using cached tasks data');
+      // console.log('📦 Using cached tasks data');
       return;
     }
     
     // Prevent duplicate concurrent requests
     if (state.tasksLoading) {
-      console.log('⏳ Tasks already loading, skipping...');
+      // console.log('⏳ Tasks already loading, skipping...');
       return;
     }
     
@@ -104,9 +104,9 @@ export const useDataStore = create<DataState>((set, get) => ({
         tasksError: null,
       });
       
-      console.log('✅ Tasks fetched successfully:', tasks.length);
+      // console.log('✅ Tasks fetched successfully:', tasks.length);
     } catch (error: any) {
-      console.error('❌ Error fetching tasks:', error);
+      // console.error('❌ Error fetching tasks:', error);
       set({
         tasksLoading: false,
         tasksError: error?.message || 'Failed to fetch tasks',
@@ -132,7 +132,7 @@ export const useDataStore = create<DataState>((set, get) => ({
       const featured = featuredResponse?.data?.data || [];
       set({ featuredTasks: featured.slice(0, 3) });
     } catch (error) {
-      console.log('Featured tasks endpoint not available, will use tasks filter when tasks are loaded');
+      // console.log('Featured tasks endpoint not available, will use tasks filter when tasks are loaded');
       // Will be populated when tasks are fetched
     }
   },
@@ -144,13 +144,13 @@ export const useDataStore = create<DataState>((set, get) => ({
     
     // Check cache if not forcing
     if (!force && state.quizzesLastFetched && (now - state.quizzesLastFetched) < CACHE_DURATION) {
-      console.log('📦 Using cached quizzes data');
+      // console.log('📦 Using cached quizzes data');
       return;
     }
     
     // Prevent duplicate concurrent requests
     if (state.quizzesLoading) {
-      console.log('⏳ Quizzes already loading, skipping...');
+      // console.log('⏳ Quizzes already loading, skipping...');
       return;
     }
     
@@ -168,9 +168,9 @@ export const useDataStore = create<DataState>((set, get) => ({
         quizzesError: null,
       });
       
-      console.log('✅ Quiz categories fetched successfully:', quizzes.length);
+      // console.log('✅ Quiz categories fetched successfully:', quizzes.length);
     } catch (error: any) {
-      console.error('❌ Error fetching quizzes:', error);
+      // console.error('❌ Error fetching quizzes:', error);
       set({
         quizzesLoading: false,
         quizzesError: error?.message || 'Failed to fetch quizzes',
@@ -185,19 +185,19 @@ export const useDataStore = create<DataState>((set, get) => ({
     
     // Check cache if not forcing
     if (!force && state.profileLastFetched && (now - state.profileLastFetched) < CACHE_DURATION && state.profile?.id) {
-      console.log('📦 Using cached profile data (ID:', state.profile.id, ')');
+      // console.log('📦 Using cached profile data (ID:', state.profile.id, ')');
       return;
     }
     
     // If cache is valid but profile is missing, we still need to fetch
     if (!force && state.profileLastFetched && (now - state.profileLastFetched) < CACHE_DURATION && !state.profile?.id) {
-      console.log('⚠️ Cache timestamp exists but profile is missing, fetching...');
+      // console.log('⚠️ Cache timestamp exists but profile is missing, fetching...');
       // Continue to fetch below
     }
     
     // Prevent duplicate concurrent requests
     if (state.profileLoading) {
-      console.log('⏳ Profile already loading, skipping...');
+      // console.log('⏳ Profile already loading, skipping...');
       return;
     }
     
@@ -214,9 +214,9 @@ export const useDataStore = create<DataState>((set, get) => ({
         profileError: null,
       });
       
-      console.log('✅ Profile fetched successfully');
+      // console.log('✅ Profile fetched successfully');
     } catch (error: any) {
-      console.error('❌ Error fetching profile:', error);
+      // console.error('❌ Error fetching profile:', error);
       set({
         profileLoading: false,
         profileError: error?.message || 'Failed to fetch profile',
@@ -236,7 +236,7 @@ export const useDataStore = create<DataState>((set, get) => ({
       state.profileLastFetched && (now - state.profileLastFetched) < CACHE_DURATION;
     
     if (hasRecentData) {
-      console.log('📦 Using cached initial data');
+      // console.log('📦 Using cached initial data');
       // Update featured tasks from cached tasks
       const featured = state.tasks.filter((task: Task) => task.is_featured || task.featured);
       set({ featuredTasks: featured.slice(0, 3) });
@@ -244,7 +244,7 @@ export const useDataStore = create<DataState>((set, get) => ({
     }
     
     // Fetch all data in parallel
-    console.log('🚀 Fetching all initial data in parallel...');
+    // console.log('🚀 Fetching all initial data in parallel...');
     
     try {
       // Get the fetch functions from the store
@@ -261,9 +261,9 @@ export const useDataStore = create<DataState>((set, get) => ({
       const featured = updatedState.tasks.filter((task: Task) => task.is_featured || task.featured);
       set({ featuredTasks: featured.slice(0, 3) });
       
-      console.log('✅ All initial data fetched successfully');
+      // console.log('✅ All initial data fetched successfully');
     } catch (error) {
-      console.error('❌ Error fetching initial data:', error);
+      // console.error('❌ Error fetching initial data:', error);
     }
   },
   

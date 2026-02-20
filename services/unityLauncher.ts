@@ -3,6 +3,22 @@ import { APP_CONFIG } from '../config/app';
 
 const { EarnPilotUnity } = NativeModules;
 
+// Use dedicated package for checking app install by package name (Android).
+// Only use it when the native module is actually linked (non-null); otherwise fall back to EarnPilotUnity.
+let CheckPackageInstallation: { isPackageInstalled: (pkg: string, cb: (installed: boolean) => void) => void } | null = null;
+let AppInstalledChecker: { checkPackageName: (pkg: string) => Promise<boolean> } | null = null;
+try {
+  const lib = require('react-native-check-app-install');
+  CheckPackageInstallation = lib.CheckPackageInstallation ?? NativeModules.CheckPackageInstallation;
+  AppInstalledChecker = lib.AppInstalledChecker;
+} catch {
+  // Package not installed
+}
+const hasCheckPackageNative =
+  Platform.OS === 'android' &&
+  CheckPackageInstallation != null &&
+  typeof CheckPackageInstallation.isPackageInstalled === 'function';
+
 export interface UnityGameConfig {
   authToken?: string; // Optional - can use email instead
   userId: number;
@@ -100,19 +116,31 @@ export class UnityLauncherService {
 
   /**
    * Check if an app is installed by package name (from admin add-on game config).
+   * Uses react-native-check-app-install on Android when available; otherwise falls back to EarnPilotUnity native module.
    */
   static async isAppInstalledByPackage(packageName: string): Promise<boolean> {
     if (Platform.OS !== 'android' || !packageName?.trim()) {
       return false;
     }
-    if (!EarnPilotUnity || typeof EarnPilotUnity.isAppInstalled !== 'function') {
-      return false;
+    const pkg = packageName.trim();
+
+    if (hasCheckPackageNative && AppInstalledChecker?.checkPackageName) {
+      try {
+        return await AppInstalledChecker.checkPackageName(pkg);
+      } catch (error) {
+        console.warn('[UnityLauncher] Check-app-install failed, trying fallback:', error);
+      }
     }
-    try {
-      return await EarnPilotUnity.isAppInstalled(packageName.trim());
-    } catch (error) {
-      console.error('[UnityLauncher] Failed to check app by package:', error);
-      return false;
+
+    if (EarnPilotUnity && typeof EarnPilotUnity.isAppInstalled === 'function') {
+      try {
+        return await EarnPilotUnity.isAppInstalled(pkg);
+      } catch (error) {
+        console.error('[UnityLauncher] Failed to check app by package:', error);
+        return false;
+      }
     }
+
+    return false;
   }
 }

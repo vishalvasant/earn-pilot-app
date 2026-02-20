@@ -29,7 +29,7 @@ import { APP_CONFIG } from '../../config/app';
 function ProfileScreen() {
   const theme = useTheme();
   const navigation = useNavigation();
-  const { shouldShowBanner, getBannerAdId } = useAdMob();
+  const { shouldShowBanner, getBannerAdId, getAdRequestOptions } = useAdMob();
   const logout = useAuthStore((s) => s.logout);
   const setProfileInStore = useUserStore((s) => s.setProfile);
 
@@ -256,6 +256,7 @@ function ProfileScreen() {
       <FixedBannerAd
         shouldShowBanner={shouldShowBanner}
         getBannerAdId={getBannerAdId}
+        requestOptions={getAdRequestOptions()}
         backgroundColor={theme.background}
       />
     </SafeAreaView>

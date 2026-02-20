@@ -60,8 +60,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     try {
       const response = await api.get('/games');
       const configs = response.data.games || [];
-      console.log('📦 API Response from /games:', JSON.stringify(response.data, null, 2));
-      console.log('🎮 Game Configs:', configs);
+      // console.log('📦 API Response from /games:', JSON.stringify(response.data, null, 2));
+      // console.log('🎮 Game Configs:', configs);
       set({ gameConfigs: configs });
     } catch (error) {
       console.error('Error loading game configs:', error);

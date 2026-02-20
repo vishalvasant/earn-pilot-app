@@ -41,7 +41,7 @@ const { width: screenWidth } = Dimensions.get('window');
 
 export default function GamesScreen() {
   const navigation = useNavigation();
-  const { shouldShowBanner, getBannerAdId, showInterstitial } = useAdMob();
+  const { shouldShowBanner, getBannerAdId, getAdRequestOptions, showInterstitial } = useAdMob();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const isInitializingCooldowns = useRef(false);
@@ -404,6 +404,7 @@ export default function GamesScreen() {
       <FixedBannerAd
         shouldShowBanner={shouldShowBanner}
         getBannerAdId={getBannerAdId}
+        requestOptions={getAdRequestOptions()}
         backgroundColor={themeColors.bgDark}
       />
       

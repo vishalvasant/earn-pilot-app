@@ -62,3 +62,23 @@ eas build --platform android --local
 3. Select Google account
 4. Redirects to home screen
 5. Data syncs with backend
+
+---
+
+## Add-on games: Play vs Download (Android)
+
+The app uses **react-native-check-app-install** to detect if an add-on game (by package name from admin) is installed, so it can show **Play** instead of **Download**.
+
+- **Rebuild required:** After adding this package, run a fresh native build (e.g. `npx react-native run-android` or your APK build) so the native module is compiled.
+- **Android 11+ (API 30+):** If the install check always shows "Download" on newer devices, add package visibility to your `android/app/src/main/AndroidManifest.xml` inside `<manifest>`:
+
+```xml
+<queries>
+  <intent>
+    <action android:name="android.intent.action.MAIN" />
+    <category android:name="android.intent.category.LAUNCHER" />
+  </intent>
+</queries>
+```
+
+This lets the app query whether other launcher apps (including add-on games) are installed.

@@ -1,0 +1,27 @@
+diff --git a/node_modules/react-native-check-app-install/android/build.gradle b/node_modules/react-native-check-app-install/android/build.gradle
+index 7caf7e1..09b47ba 100644
+--- a/node_modules/react-native-check-app-install/android/build.gradle
++++ b/node_modules/react-native-check-app-install/android/build.gradle
+@@ -11,12 +11,11 @@ buildscript {
+ apply plugin: 'com.android.library'
+ 
+ android {
+-    compileSdkVersion 23
+-    buildToolsVersion "23.0.1"
++    compileSdkVersion 34
+ 
+     defaultConfig {
+         minSdkVersion 16
+-        targetSdkVersion 23
++        targetSdkVersion 34
+         versionCode 1
+         versionName "1.0"
+     }
+@@ -35,5 +34,5 @@ repositories {
+ }
+ 
+ dependencies {
+-    compile 'com.facebook.react:react-native:+'
++    implementation 'com.facebook.react:react-native:+'
+ }
+\ No newline at end of file

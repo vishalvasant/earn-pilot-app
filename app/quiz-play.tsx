@@ -37,7 +37,7 @@ export default function QuizPlayScreen() {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const fetchProfile = useDataStore((s) => s.fetchProfile);
-  const { showInterstitial, shouldShowBanner, getBannerAdId } = useAdMob();
+  const { showInterstitial, shouldShowBanner, getBannerAdId, getAdRequestOptions } = useAdMob();
   const prevIndexRef = useRef<number>(0);
 
   const quizId: number = route?.params?.id;
@@ -289,6 +289,7 @@ export default function QuizPlayScreen() {
       <FixedBannerAd
         shouldShowBanner={shouldShowBanner}
         getBannerAdId={getBannerAdId}
+        requestOptions={getAdRequestOptions()}
         backgroundColor={theme.background}
       />
     </SafeAreaView>

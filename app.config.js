@@ -41,37 +41,18 @@ export default {
     favicon: './assets/images/NewPilot.png'
   },
   plugins: [
-    // Removed expo-router and expo-screen-orientation as we're using React Navigation
-    // Orientation locking should be handled in App.tsx or using react-native-orientation-locker
     [
       'react-native-google-mobile-ads',
       {
-        androidAppId: 'ca-app-pub-3940256099942544~3347511713',
-        iosAppId: 'ca-app-pub-3940256099942544~1458002511'
-      }
-    ],
-    [
-      'expo-build-properties',
-      {
-        android: {
-          kotlinVersion: '1.9.25',
-          compileSdkVersion: 35,
-          targetSdkVersion: 36,
-          buildToolsVersion: '35.0.0',
-          ndkVersion: '26.1.10909125'
-        }
+        // Use your real AdMob App IDs from AdMob dashboard / admin. Test IDs force test ads everywhere.
+        androidAppId: 'ca-app-pub-1702224910233562~6831511231',
+        iosAppId: 'ca-app-pub-1702224910233562~6831511231' // Replace with your iOS App ID from AdMob if different
       }
     ]
   ],
-  experiments: {
-    typedRoutes: true
-  },
   extra: {
     // Production API URL (use for release builds)
     API_BASE_URL: "https://networks11.com",
-    eas: {
-      projectId: "156da554-3870-41b3-9a68-2191a71f936d"
-    },
     // Firebase and Google Sign-In Configuration
     FIREBASE_CONFIG: {
       projectId: "earn-pilot-app",

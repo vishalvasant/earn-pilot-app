@@ -16,7 +16,7 @@ if (Platform.OS === 'android') {
   }
 }
 
-console.log('🔗 API Base URL:', resolvedBaseURL);
+// console.log('🔗 API Base URL:', resolvedBaseURL);
 
 export const api = axios.create({ baseURL: `${resolvedBaseURL}/api` });
 
@@ -28,24 +28,19 @@ api.interceptors.request.use(async (config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-  console.log('📤 API Request:', config.method?.toUpperCase(), config.url);
+  // console.log('📤 API Request:', config.method?.toUpperCase(), config.url);
   return config;
 });
 
 api.interceptors.response.use(
   (res) => {
-    console.log('✅ API Response:', res.config.url, res.status);
+    // console.log('✅ API Response:', res.config.url, res.status);
     return res;
   },
   (err) => {
-    console.log('❌ API Error:', err.config?.url, err.message);
-    if (err.response) {
-      console.log('Response data:', err.response.data);
-      console.log('Response status:', err.response.status);
-    } else if (err.request) {
-      console.log('No response received. Network issue or CORS problem.');
-      console.log('Request:', err.request);
-    }
+    // console.log('❌ API Error:', err.config?.url, err.message);
+    // if (err.response) { console.log('Response data:', err.response.data); console.log('Response status:', err.response.status); }
+    // else if (err.request) { console.log('No response received.'); console.log('Request:', err.request); }
     return Promise.reject(err);
   },
 );
@@ -132,9 +127,9 @@ export const updateProfile = async (data: {
     })
   );
   
-  console.log('📤 Sending profile update request with data:', cleanData);
+  // console.log('📤 Sending profile update request with data:', cleanData);
   const response = await api.put('/profile', cleanData);
-  console.log('📥 Profile update response:', response.data);
+  // console.log('📥 Profile update response:', response.data);
   return response.data;
 };
 

@@ -214,12 +214,12 @@ const RootStack = () => {
           scopes: ['profile', 'email'],
         });
         
-        console.log('GoogleSignin configured successfully');
+        // console.log('GoogleSignin configured successfully');
         
         // Restore token from storage
         await restoreToken();
       } catch (e) {
-        console.error('Failed to restore token:', e);
+        // console.error('Failed to restore token:', e);
       } finally {
         // Ensure splash screen stays visible for at least 2.5 seconds
         const elapsedTime = Date.now() - startTime;
@@ -253,7 +253,7 @@ const RootStack = () => {
     return <SplashScreen />;
   }
 
-  // After splash: show permission screen until we actually have notification permission.
+  // 1) Ask notification permission first. 2) When allowed: if logged in → Home (or referral), else → Login.
   if (!notificationGranted) {
     return (
       <NotificationPermissionScreen
@@ -262,6 +262,7 @@ const RootStack = () => {
     );
   }
 
+  // Permission granted: show Auth (login) if not authenticated, else MainApp (home) or ReferralCode for new users
   return (
     <Stack.Navigator
       screenOptions={{

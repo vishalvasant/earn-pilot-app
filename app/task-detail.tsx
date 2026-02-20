@@ -55,7 +55,7 @@ export default function TaskDetailScreen() {
   const navigation = useNavigation();
   const { taskId } = route.params || {};
   const theme = useTheme();
-  const { showInterstitial, shouldShowBanner, getBannerAdId } = useAdMob();
+  const { showInterstitial, shouldShowBanner, getBannerAdId, getAdRequestOptions } = useAdMob();
   
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -79,6 +79,20 @@ export default function TaskDetailScreen() {
   useEffect(() => {
     fetchTaskDetail();
   }, [taskId]);
+
+  // For tasks with energy cost, ensure task is "started" so completeTask can succeed when all required subtasks are done
+  const startCalledRef = useRef<number>(0);
+  useEffect(() => {
+    if (!task || !taskId || task.status === 'completed' || task.disabled) return;
+    if (!task.has_subtasks || !(task.energy_cost > 0)) return;
+    if (startCalledRef.current === taskId) return;
+    startCalledRef.current = taskId;
+    api.post(`/tasks/${taskId}/start`).then(() => {
+      // Idempotent; no need to update UI
+    }).catch(() => {
+      startCalledRef.current = 0;
+    });
+  }, [taskId, task?.id, task?.status, task?.disabled, task?.has_subtasks, task?.energy_cost]);
 
   useEffect(() => {
     const backAction = () => {
@@ -122,19 +136,23 @@ export default function TaskDetailScreen() {
     };
   }, [activeSubtask?.id]);
 
-  const fetchTaskDetail = async () => {
+  const fetchTaskDetail = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const response = await api.get(`/tasks/${taskId}`);
       setTask(response.data.data);
+      return response.data.data as TaskDetail;
     } catch (error: any) {
-      console.error('Error fetching task detail:', error);
-      showPopup(
-        'Error',
-        error.response?.data?.message || 'Failed to load task details'
-      );
+      if (!silent) {
+        console.error('Error fetching task detail:', error);
+        showPopup(
+          'Error',
+          error.response?.data?.message || 'Failed to load task details'
+        );
+      }
+      return null;
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -152,22 +170,64 @@ export default function TaskDetailScreen() {
       const response = await api.post(`/tasks/subtasks/${subtask.id}/complete`);
       
       if (response.data.success) {
-        // Update the subtask in local state
-        setTask(prevTask => {
-          if (!prevTask) return null;
-          return {
-            ...prevTask,
-            subtasks: prevTask.subtasks.map(st =>
-              st.id === subtask.id ? { ...st, status: 'completed' } : st
-            )
-          };
-        });
+        setActiveSubtask(null);
 
-        showPopup(
-          'Subtask Completed!',
-          `You earned ${subtask.reward_points} points for completing "${subtask.title}"`
-        );
-        
+        // Refetch task from server to get latest subtask statuses
+        const updatedTask = await fetchTaskDetail(true);
+        const currentTask = updatedTask || task;
+        if (!currentTask) return;
+
+        // If task has subtasks and all required (or all if none required) are completed, complete the whole task (credits points and marks task done)
+        if (currentTask.has_subtasks && currentTask.subtasks?.length) {
+          const required = currentTask.subtasks.filter(st => st.is_required);
+          const allRequiredDone = required.length > 0
+            ? required.every(st => st.status === 'completed')
+            : currentTask.subtasks.every(st => st.status === 'completed');
+          if (allRequiredDone && currentTask.status !== 'completed') {
+            try {
+              let completeRes = await api.post(`/tasks/${taskId}/complete`);
+              if (completeRes.data.success) {
+                const points = completeRes.data.points ?? currentTask.reward_points;
+                await fetchTaskDetail(true);
+                showPopup(
+                  'Task Completed!',
+                  `You earned ${points} points. All required steps are done!`
+                );
+              }
+            } catch (completeErr: any) {
+              const msg = completeErr.response?.data?.message || '';
+              if (completeErr.response?.status === 409 && msg.toLowerCase().includes('start')) {
+                try {
+                  await api.post(`/tasks/${taskId}/start`);
+                  const completeRes = await api.post(`/tasks/${taskId}/complete`);
+                  if (completeRes.data.success) {
+                    const points = completeRes.data.points ?? currentTask.reward_points;
+                    await fetchTaskDetail(true);
+                    showPopup(
+                      'Task Completed!',
+                      `You earned ${points} points. All required steps are done!`
+                    );
+                  }
+                } catch (e2: any) {
+                  showPopup('Error', e2.response?.data?.message || 'Failed to complete task');
+                }
+              } else {
+                showPopup('Error', msg || 'Failed to complete task');
+              }
+            }
+          } else {
+            showPopup(
+              'Subtask Completed!',
+              `You earned ${subtask.reward_points} points for completing "${subtask.title}"`
+            );
+          }
+        } else {
+          showPopup(
+            'Subtask Completed!',
+            `You earned ${subtask.reward_points} points for completing "${subtask.title}"`
+          );
+        }
+
         // Refresh profile so points and balances update across the app
         try {
           await useDataStore.getState().fetchProfile(true);
@@ -176,8 +236,6 @@ export default function TaskDetailScreen() {
         } catch (e) {
           // ignore profile refresh errors
         }
-
-        setActiveSubtask(null);
       }
     } catch (error: any) {
       console.error('Error completing subtask:', error);
@@ -403,6 +461,11 @@ export default function TaskDetailScreen() {
                     : '◉ Available'}
               </Text>
             </View>
+            {task.disabled && task.is_repeatable && task.daily_limit > 0 && (
+              <Text style={[styles.infoHint, { color: theme.textSecondary }]}>
+                You can do this task again tomorrow.
+              </Text>
+            )}
           </View>
 
           {task.has_subtasks && (
@@ -496,12 +559,14 @@ export default function TaskDetailScreen() {
         visible={popupVisible}
         title={popupConfig.title}
         message={popupConfig.message}
+        onConfirm={() => setPopupVisible(false)}
         onClose={() => setPopupVisible(false)}
       />
 
       <FixedBannerAd
         shouldShowBanner={shouldShowBanner}
         getBannerAdId={getBannerAdId}
+        requestOptions={getAdRequestOptions()}
         backgroundColor={theme.background}
       />
     </SafeAreaView>
@@ -609,6 +674,11 @@ const createStyles = (theme: any) => StyleSheet.create({
   infoValue: {
     fontSize: 14,
     fontWeight: '700',
+  },
+  infoHint: {
+    fontSize: 12,
+    marginTop: 6,
+    opacity: 0.85,
   },
   progressBar: {
     height: 6,

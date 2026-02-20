@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { AppState } from 'react-native';
 import { admobService, AdMobConfig } from '../services/admob';
 
 export function useAdMob() {
@@ -10,31 +11,42 @@ export function useAdMob() {
     initializeAdMob();
   }, []);
 
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        const latest = admobService.getConfig();
+        setConfig(latest);
+        setShouldShowBanner(admobService.shouldShowBannerAd());
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   // Update banner visibility when config changes
   useEffect(() => {
     if (initialized && config) {
       const show = admobService.shouldShowBannerAd();
-      console.log(`📱 useAdMob: shouldShowBanner updated to ${show}`);
+      // console.log(`📱 useAdMob: shouldShowBanner updated to ${show}`);
       setShouldShowBanner(show);
     }
   }, [initialized, config]);
 
   const initializeAdMob = async () => {
     try {
-      console.log('🚀 useAdMob: Initializing...');
+      // console.log('🚀 useAdMob: Initializing...');
       await admobService.initialize();
       const fetchedConfig = admobService.getConfig();
-      console.log('📋 useAdMob: Config fetched:', fetchedConfig);
+      // console.log('📋 useAdMob: Config fetched:', fetchedConfig);
       setConfig(fetchedConfig);
       
       // Set banner visibility after config is loaded
       const show = admobService.shouldShowBannerAd();
-      console.log(`📱 useAdMob: shouldShowBanner set to ${show}`);
+      // console.log(`📱 useAdMob: shouldShowBanner set to ${show}`);
       setShouldShowBanner(show);
       
       setInitialized(true);
     } catch (error) {
-      console.error('Failed to initialize AdMob:', error);
+      // console.error('Failed to initialize AdMob:', error);
     }
   };
 
@@ -58,6 +70,10 @@ export function useAdMob() {
     return admobService.getBannerAdId();
   }, []);
 
+  const getAdRequestOptions = useCallback(() => {
+    return admobService.getAdRequestOptions();
+  }, []);
+
   return {
     config,
     initialized,
@@ -67,5 +83,6 @@ export function useAdMob() {
     getRewardedAdBonus,
     shouldShowBanner,
     getBannerAdId,
+    getAdRequestOptions,
   };
 }

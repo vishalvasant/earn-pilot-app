@@ -56,13 +56,14 @@ const getGreeting = () => {
 export default function HomeScreen() {
   const navigation = useNavigation();
   const theme = useTheme();
-  const { shouldShowBanner, getBannerAdId, showInterstitial } = useAdMob();
+  const { shouldShowBanner, getBannerAdId, getAdRequestOptions, showInterstitial } = useAdMob();
   const token = useAuthStore(state => state.token);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const [refreshing, setRefreshing] = useState(false);
   const [activeGame, setActiveGame] = useState<'color-match' | 'image-similarity' | 'math-quiz' | 'memory-pattern' | null>(null);
   const [showCooldownPopup, setShowCooldownPopup] = useState(false);
+  const [inlineBannerFailed, setInlineBannerFailed] = useState(false);
   const [cooldownMessage, setCooldownMessage] = useState('');
   const [popupTitle, setPopupTitle] = useState('Game Complete');
   const isInitializingCooldowns = useRef(false);
@@ -80,7 +81,7 @@ export default function HomeScreen() {
   // Debug game configs (only log when configs actually change, not on every render)
   useEffect(() => {
     if (gameConfigs.length > 0) {
-      console.log('🎮 Game Configs Loaded:', gameConfigs.length);
+      // console.log('🎮 Game Configs Loaded:', gameConfigs.length);
     }
   }, [gameConfigs.length]);
   
@@ -114,6 +115,10 @@ export default function HomeScreen() {
   const [selectedAddOnGame, setSelectedAddOnGame] = useState<AddOnGame | null>(null);
   const [showAddOnModal, setShowAddOnModal] = useState(false);
   const [addOnGameInstalled, setAddOnGameInstalled] = useState<boolean | null>(null);
+  /** Per add-on game: is the app installed? (game.id -> true/false/null). Used for card label Play vs Download. */
+  const [addOnGameInstalledMap, setAddOnGameInstalledMap] = useState<Record<number, boolean | null>>({});
+  /** Incremented when home tab gains focus so we re-check installed state (e.g. after user installs from store). */
+  const [addOnGamesRefreshKey, setAddOnGamesRefreshKey] = useState(0);
   
   // Use centralized data store
   const { 
@@ -138,6 +143,7 @@ export default function HomeScreen() {
           const dataStore = useDataStore.getState();
           await dataStore.fetchProfile(true);
           if (!cancelled && dataStore.profile) setProfile(dataStore.profile);
+          if (!cancelled) setAddOnGamesRefreshKey((k) => k + 1);
         } catch (e) {
           if (!cancelled) console.warn('Focus refresh failed:', e);
         }
@@ -164,7 +170,7 @@ export default function HomeScreen() {
         setupMessageHandlers();
         
         // Fetch all data in parallel: dashboard, games, tasks, quizzes, profile
-        console.log('🚀 Starting parallel data fetch...');
+        // console.log('🚀 Starting parallel data fetch...');
         
         await Promise.all([
           // Dashboard (includes wallet balance, activity, and tasks internally)
@@ -219,9 +225,9 @@ export default function HomeScreen() {
           setProfile(dataStoreProfile);
         }
         
-        console.log('✅ All data loaded successfully');
+        // console.log('✅ All data loaded successfully');
       } catch (e) {
-        console.warn('Failed to load initial data', e);
+        // console.warn('Failed to load initial data', e);
       } finally {
         setLoadingDashboard(false);
       }
@@ -258,7 +264,35 @@ export default function HomeScreen() {
     }
   }, []);
 
-  // When add-on game modal opens, check if that game's app is installed (by package_name from admin API)
+  // When add-on games list is set, check installed state for each (for card label: Play vs Download)
+  useEffect(() => {
+    if (addOnGames.length === 0) {
+      setAddOnGameInstalledMap({});
+      return;
+    }
+    // Set initial map in one update: no package_name => show Play (can't check), else null (checking)
+    const initialMap: Record<number, boolean | null> = {};
+    addOnGames.forEach((game) => {
+      const pkg = game.package_name?.trim();
+      initialMap[game.id] = !pkg ? true : null;
+    });
+    setAddOnGameInstalledMap(initialMap);
+
+    // Then check each game that has a package_name
+    addOnGames.forEach((game) => {
+      const pkg = game.package_name?.trim();
+      if (!pkg) return;
+      UnityLauncherService.isAppInstalledByPackage(pkg)
+        .then((installed) => {
+          setAddOnGameInstalledMap((prev) => ({ ...prev, [game.id]: installed }));
+        })
+        .catch(() => {
+          setAddOnGameInstalledMap((prev) => ({ ...prev, [game.id]: false }));
+        });
+    });
+  }, [addOnGamesRefreshKey, addOnGames.length, addOnGames.map((g) => `${g.id}:${g.package_name || ''}`).join(',')]);
+
+  // When add-on game modal opens, use card map if known else check if that game's app is installed
   useEffect(() => {
     if (!selectedAddOnGame) {
       setAddOnGameInstalled(null);
@@ -269,8 +303,21 @@ export default function HomeScreen() {
       setAddOnGameInstalled(true);
       return;
     }
-    setAddOnGameInstalled(null);
-    UnityLauncherService.isAppInstalledByPackage(pkg).then(setAddOnGameInstalled).catch(() => setAddOnGameInstalled(false));
+    const fromMap = addOnGameInstalledMap[selectedAddOnGame.id];
+    if (fromMap !== undefined && fromMap !== null) {
+      setAddOnGameInstalled(fromMap);
+    } else {
+      setAddOnGameInstalled(null);
+    }
+    UnityLauncherService.isAppInstalledByPackage(pkg)
+      .then((installed) => {
+        setAddOnGameInstalled(installed);
+        setAddOnGameInstalledMap((prev) => ({ ...prev, [selectedAddOnGame.id]: installed }));
+      })
+      .catch(() => {
+        setAddOnGameInstalled(false);
+        setAddOnGameInstalledMap((prev) => ({ ...prev, [selectedAddOnGame.id]: false }));
+      });
   }, [selectedAddOnGame?.id, selectedAddOnGame?.package_name]);
 
   // Initialize cooldowns
@@ -438,7 +485,7 @@ export default function HomeScreen() {
         try {
           await showInterstitial();
         } catch (adError) {
-          console.log('Ad not shown:', adError);
+          // console.log('Ad not shown:', adError);
         }
 
         // Only track game stats locally, points are handled by backend
@@ -595,8 +642,8 @@ export default function HomeScreen() {
             </LinearGradient>
           )}
 
-        {/* Banner Ad above Add-On Games */}
-        {shouldShowBanner && (() => {
+        {/* Banner Ad above Add-On Games – hidden when no-fill or load failure */}
+        {shouldShowBanner && !inlineBannerFailed && (() => {
           try {
             const { BannerAd, BannerAdSize } = require('react-native-google-mobile-ads');
             return (
@@ -604,6 +651,8 @@ export default function HomeScreen() {
                 <BannerAd
                   unitId={getBannerAdId()}
                   size={BannerAdSize.BANNER}
+                  requestOptions={getAdRequestOptions()}
+                  onAdFailedToLoad={() => setInlineBannerFailed(true)}
                 />
               </View>
             );
@@ -641,7 +690,9 @@ export default function HomeScreen() {
                 <Text style={[styles.addOnGameName, { color: theme.text }]} numberOfLines={1}>
                   {game.name}
                 </Text>
-                <Text style={[styles.playLabel, { color: theme.primary }]}>Play Now</Text>
+                <Text style={[styles.playLabel, { color: theme.primary }]}>
+                  {addOnGameInstalledMap[game.id] === false ? 'Download' : addOnGameInstalledMap[game.id] === true ? 'Play' : '...'}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -982,6 +1033,7 @@ export default function HomeScreen() {
       <FixedBannerAd
         shouldShowBanner={shouldShowBanner}
         getBannerAdId={getBannerAdId}
+        requestOptions={getAdRequestOptions()}
         backgroundColor={theme.background}
       />
     </SafeAreaView>

@@ -1,6 +1,5 @@
 {
-  "extends": ["universe/native", "universe/shared/typescript-analysis"],
-  "plugins": [],
+  "extends": "@react-native/eslint-config",
   "rules": {
     "no-console": ["warn", { "allow": ["warn", "error"] }]
   }

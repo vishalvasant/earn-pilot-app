@@ -26,7 +26,7 @@ export default function TasksScreen() {
   const theme = useTheme();
   // const navigation = useNavigation();
   const navigation = useNavigation<any>();
-  const { shouldShowBanner, getBannerAdId } = useAdMob();
+  const { shouldShowBanner, getBannerAdId, getAdRequestOptions } = useAdMob();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -69,11 +69,11 @@ export default function TasksScreen() {
     }
   }, [categories, expandedCategories]);
 
-  // Filter tasks based on status
+  // Filter tasks based on status. Repeatable tasks always count as "open" so user can access them (may show "Daily limit reached" on detail).
   const filterTasksByStatus = (tasks: Task[]) => {
     if (filterStatus === 'all') return tasks;
-    if (filterStatus === 'open') return tasks.filter(task => task.status !== 'completed' && task.status !== 'done');
-    if (filterStatus === 'completed') return tasks.filter(task => task.status === 'completed' || task.status === 'done');
+    if (filterStatus === 'open') return tasks.filter(task => task.is_repeatable || (task.status !== 'completed' && task.status !== 'done'));
+    if (filterStatus === 'completed') return tasks.filter(task => !task.is_repeatable && (task.status === 'completed' || task.status === 'done'));
     return tasks;
   };
 
@@ -190,13 +190,13 @@ export default function TasksScreen() {
                             ]}
                             onPress={() => navigation.navigate('TaskDetail', { taskId: task.id })}
                             activeOpacity={0.7}
-                            disabled={task.disabled}
+                            disabled={task.disabled && !task.is_repeatable}
                           >
                             <View style={styles.taskContent}>
                               <View style={styles.taskInfo}>
                                 <Text style={[
                                   styles.listText,
-                                  { color: task.disabled ? theme.textSecondary : theme.text }
+                                  { color: task.disabled && !task.is_repeatable ? theme.textSecondary : theme.text }
                                 ]}>
                                   {task.title}
                                 </Text>
@@ -216,7 +216,7 @@ export default function TasksScreen() {
                               <View style={[styles.rewardBadge, { backgroundColor: theme.primary + '15' }]}>
                                 <Text style={[
                                   styles.rewardText,
-                                  { color: task.disabled ? theme.textSecondary : theme.primary }
+                                  { color: task.disabled && !task.is_repeatable ? theme.textSecondary : theme.primary }
                                 ]}>
                                   +{task.reward_points}
                                 </Text>
@@ -240,6 +240,7 @@ export default function TasksScreen() {
       <FixedBannerAd
         shouldShowBanner={shouldShowBanner}
         getBannerAdId={getBannerAdId}
+        requestOptions={getAdRequestOptions()}
         backgroundColor={theme.background}
       />
     </SafeAreaView>

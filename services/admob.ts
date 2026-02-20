@@ -1,8 +1,16 @@
 import { api, getProfile } from './api';
 import { useUserStore } from '../stores/userStore';
-import { Platform } from 'react-native';
+import { Platform, AppState, type AppStateStatus } from 'react-native';
+import { APP_CONFIG } from '../config/app';
 
-// Import with safe fallback for Expo Go (will show warning but not crash)
+/**
+ * AdMob & Ad Manager: All ad unit IDs and the optional Ad Manager banner tag are populated from
+ * the config returned by the admin API (GET /api/admob/config?platform=android|ios). No ad IDs
+ * are hardcoded for production; test IDs are used only when test_mode is true or when the
+ * native module is unavailable.
+ */
+
+// Import with safe fallback when native AdMob module is not available
 let mobileAds: any = null;
 let BannerAd: any = null;
 let BannerAdSize: any = null;
@@ -22,7 +30,6 @@ const GOOGLE_TEST_IDS = {
 };
 
 let admobModuleAvailable = false;
-const FORCE_TEST_MODE = false; // Use backend test_mode instead; fallback to test IDs only when flagged or missing
 
 try {
   const admobModule = require('react-native-google-mobile-ads');
@@ -34,10 +41,10 @@ try {
   AdEventType = admobModule.AdEventType;
   RewardedAdEventType = admobModule.RewardedAdEventType;
   admobModuleAvailable = true;
-  console.log('✅ AdMob module loaded successfully');
+  // console.log('✅ AdMob module loaded successfully');
 } catch (error: any) {
-  console.warn('⚠️ AdMob module not available (expected in Expo Go - use expo-dev-client for testing)');
-  console.warn('Error details:', error.message);
+  // AdMob native module not available (e.g. dev without native build)
+  // console.warn('Error details:', error.message);
 }
 
 export interface AdMobConfig {
@@ -71,8 +78,8 @@ class AdMobService {
   private rewardedAdsWatchedToday = 0;
   private lastRewardedAdDate: string | null = null;
   
-  // Check if AdMob module is available (not Expo Go)
-  private get isExpoGo(): boolean {
+  /** True when the native AdMob module is not available (e.g. dev without native build). */
+  private get isAdMobUnavailable(): boolean {
     return !admobModuleAvailable;
   }
 
@@ -82,48 +89,59 @@ class AdMobService {
     try {
       // If AdMob module is not available, skip initialization
       if (!admobModuleAvailable) {
-        console.warn('⚠️ AdMob not available (running in Expo Go or dev client without native module)');
+        // AdMob not available (native module not loaded)
         this.initialized = true;
         return;
       }
 
-      console.log('🚀 Initializing Google Mobile Ads SDK');
-      // Initialize Google Mobile Ads SDK (guard errors to avoid crashing init)
+      // console.log('🚀 Initializing Google Mobile Ads SDK');
       try {
         await mobileAds().initialize();
-        console.log('✅ Google Mobile Ads SDK initialized');
+        // console.log('✅ Google Mobile Ads SDK initialized');
       } catch (e: any) {
-        console.error('❌ mobileAds().initialize() failed:', e?.message || e);
+        // console.error('❌ mobileAds().initialize() failed:', e?.message || e);
         if (e?.stack) console.error('Stack:', e.stack);
         return;
       }
 
-      // Fetch config from backend (uses internal fallback on error)
       await this.fetchConfig();
-      console.log(`📋 AdMob Config: enabled=${this.config?.is_enabled}, banners=${this.config?.show_banner_ads}, interstitials=${this.config?.show_interstitial_ads}, rewarded=${this.config?.show_rewarded_ads}`);
+      this.setupAppStateRefetch();
 
-      // Pre-load ads if enabled (guard each to prevent init failure)
       if (this.config?.show_interstitial_ads) {
         try {
           this.loadInterstitialAd();
         } catch (e: any) {
-          console.warn('⚠️ Failed to load interstitial ad:', e?.message || e);
+          // console.warn('⚠️ Failed to load interstitial ad:', e?.message || e);
         }
       }
       if (this.config?.show_rewarded_ads) {
         try {
           this.loadRewardedAd();
         } catch (e: any) {
-          console.warn('⚠️ Failed to load rewarded ad:', e?.message || e);
+          // console.warn('⚠️ Failed to load rewarded ad:', e?.message || e);
         }
       }
 
       this.initialized = true;
-      console.log('✅ AdMob fully initialized and ready');
+      // console.log('✅ AdMob fully initialized and ready');
     } catch (error: any) {
-      console.error('❌ Failed to initialize AdMob (outer):', error?.message || error);
+      // console.error('❌ Failed to initialize AdMob (outer):', error?.message || error);
       if (error?.stack) console.error('Stack:', error.stack);
     }
+  }
+
+  private appStateSubscription: { remove: () => void } | null = null;
+
+  setupAppStateRefetch(): void {
+    this.appStateSubscription?.remove();
+    this.appStateSubscription = AppState.addEventListener('change', (state: AppStateStatus) => {
+      if (state === 'active') {
+        this.fetchConfig().then(() => {
+          if (this.config?.show_interstitial_ads) this.loadInterstitialAd();
+          if (this.config?.show_rewarded_ads) this.loadRewardedAd();
+        });
+      }
+    });
   }
 
   async fetchConfig(): Promise<void> {
@@ -132,29 +150,28 @@ class AdMobService {
       const response = await api.get(`/admob/config?platform=${platform}`);
       // Backend returns { success: true, config: {...} }
       this.config = response.data?.config || null;
-      console.log('✅ AdMob config fetched from backend:', this.config);
-      console.log('📍 Banner Ad Tag:', this.config?.banner_ad_tag || 'Not set');
+      const testMode = this.config?.test_mode ?? true;
+      const bannerId = this.config?.banner_ad_id ?? '';
+      const usingRealAds = !testMode && !!bannerId && !bannerId.startsWith('ca-app-pub-3940256099942544');
+      // console.log('✅ AdMob config fetched from backend');
+      console.log(`📺 Ad mode: ${usingRealAds ? 'PRODUCTION (real ads)' : 'TEST (test ads)'} | test_mode=${testMode} | banner_ad_id=${bannerId ? `${bannerId.slice(0, 30)}...` : '(empty)'}`);
+      if (__DEV__ && usingRealAds) {
+        console.log('📱 Tip: On an emulator/simulator, AdMob often shows test-style ads even with real IDs. Use a real device to see production ads.');
+      }
     } catch (error) {
-      console.error('❌ Failed to fetch AdMob config, using fallback defaults:', error);
-      // Use default config with test IDs as fallback
+      console.warn('❌ AdMob config fetch failed; ads disabled until config is available.', error);
+      // Do NOT fall back to test IDs – disable ads so we never show test ads in production by mistake
       this.config = {
-        is_enabled: true,
+        is_enabled: false,
         test_mode: true,
-        show_banner_ads: true,
-        show_interstitial_ads: true,
-        show_rewarded_ads: true,
+        show_banner_ads: false,
+        show_interstitial_ads: false,
+        show_rewarded_ads: false,
         show_native_ads: false,
         show_app_open_ads: false,
         interstitial_ad_frequency: 3,
         rewarded_ad_points_bonus: 50,
         max_rewarded_ads_per_day: 5,
-        // Fallback to test IDs
-        banner_ad_id: GOOGLE_TEST_IDS.BANNER,
-        banner_ad_tag: '/23329430372/banne', // Your Ad Manager tag as fallback
-        interstitial_ad_id: GOOGLE_TEST_IDS.INTERSTITIAL,
-        rewarded_ad_id: GOOGLE_TEST_IDS.REWARDED,
-        native_ad_id: GOOGLE_TEST_IDS.NATIVE,
-        app_open_ad_id: GOOGLE_TEST_IDS.APP_OPEN,
       };
     }
   }
@@ -164,80 +181,77 @@ class AdMobService {
   }
 
   isEnabled(): boolean {
-    return !this.isExpoGo && (this.config?.is_enabled || false);
+    return !this.isAdMobUnavailable && (this.config?.is_enabled || false);
+  }
+
+  /** True if the ID is a known Google test ad unit ID. */
+  private isTestAdId(id: string | undefined): boolean {
+    return !id || id.startsWith('ca-app-pub-3940256099942544');
   }
 
   // Banner Ad Methods
   getBannerAdId(): string {
-    // Force test banner for testing (no log per call to avoid spam when component re-renders)
-    return GOOGLE_TEST_IDS.BANNER;
-    
-    /* Original logic - commented for testing
-    // Priority: Ad Manager tag > Config ID > Test ID
     const adTag = this.config?.banner_ad_tag;
     const fromConfig = this.config?.banner_ad_id;
-    const test = this.config?.test_mode || FORCE_TEST_MODE;
+    const testMode = this.config?.test_mode === true;
 
-    if (this.isExpoGo) {
-      console.log('📱 Expo Go detected - returning test banner ID');
+    if (this.isAdMobUnavailable) {
       return GOOGLE_TEST_IDS.BANNER;
     }
 
-    // Use Ad Manager tag if available
     if (adTag) {
-      console.log('🎯 Using Ad Manager banner tag:', adTag);
       return adTag;
     }
 
-    if (test || !fromConfig) {
-      console.log('🧪 Test mode or missing ID - using Google test banner ID');
+    if (testMode || !fromConfig || this.isTestAdId(fromConfig)) {
       return GOOGLE_TEST_IDS.BANNER;
     }
 
-    console.log('📺 Using AdMob banner ID:', fromConfig);
     return fromConfig;
-    */
   }
 
   shouldShowBannerAd(): boolean {
-    const show = !this.isExpoGo && this.isEnabled() && (this.config?.show_banner_ads || false);
-    console.log(`🎯 shouldShowBannerAd: ${show} (isExpoGo: ${this.isExpoGo}, isEnabled: ${this.isEnabled()}, showBanners: ${this.config?.show_banner_ads})`);
+    const show = !this.isAdMobUnavailable && this.isEnabled() && (this.config?.show_banner_ads || false);
+    // console.log(`🎯 shouldShowBannerAd: ${show} ...`);
     return show;
+  }
+
+  /** Request options for ad requests (e.g. location from APP_CONFIG.AD_REQUEST_LOCATION). */
+  getAdRequestOptions(): { location?: { latitude: number; longitude: number; accuracy?: number } } {
+    return APP_CONFIG.AD_REQUEST_LOCATION
+      ? { location: APP_CONFIG.AD_REQUEST_LOCATION }
+      : {};
   }
 
   // Interstitial Ad Methods
   loadInterstitialAd(): void {
-    if (this.isExpoGo || !this.config?.show_interstitial_ads) {
-      console.log('⏭️ Interstitial loading skipped - ExpoGo or disabled');
+    if (this.isAdMobUnavailable || !this.config?.show_interstitial_ads) {
       return;
     }
 
     const fromConfig = this.config?.interstitial_ad_id;
-    const test = this.config?.test_mode || FORCE_TEST_MODE;
+    const testMode = this.config?.test_mode === true;
+    const useReal = fromConfig && !this.isTestAdId(fromConfig) && !testMode;
+    const adId = useReal ? fromConfig : GOOGLE_TEST_IDS.INTERSTITIAL;
 
-    const adId = test || !fromConfig
-      ? GOOGLE_TEST_IDS.INTERSTITIAL 
-      : fromConfig;
+    // console.log(`⏭️ Loading interstitial ad with ID: ${adId}`);
 
-    console.log(`⏭️ Loading interstitial ad with ID: ${adId}`);
-
-    this.interstitialAd = InterstitialAd.createForAdRequest(adId);
+    this.interstitialAd = InterstitialAd.createForAdRequest(adId, this.getAdRequestOptions());
     this.interstitialLoaded = false;
     
     this.interstitialAd.addAdEventListener(AdEventType.LOADED, () => {
       this.interstitialLoaded = true;
-      console.log('✅ Interstitial ad loaded');
+      console.log('📺 Interstitial ad loaded');
     });
 
     this.interstitialAd.addAdEventListener(AdEventType.CLOSED, () => {
-      console.log('❌ Interstitial ad closed');
+      // console.log('❌ Interstitial ad closed');
       this.interstitialLoaded = false;
-      // Reload next ad
       this.loadInterstitialAd();
     });
 
     this.interstitialAd.addAdEventListener(AdEventType.ERROR, (error: any) => {
-      console.warn('⚠️ Interstitial error, reloading:', error?.message || error);
+      console.warn('📺 Interstitial error:', error?.message || error);
       this.interstitialLoaded = false;
       this.loadInterstitialAd();
     });
@@ -246,38 +260,33 @@ class AdMobService {
   }
 
   async showInterstitialAd(): Promise<boolean> {
-    if (this.isExpoGo) {
-      console.log('📱 Expo Go - skipping interstitial');
+    if (this.isAdMobUnavailable) {
       return false;
     }
-    
+
     if (!this.config?.show_interstitial_ads || !this.interstitialAd) {
-      console.log(`⏭️ Interstitial show skipped - enabled: ${this.config?.show_interstitial_ads}, instance: ${!!this.interstitialAd}`);
       return false;
     }
 
     if (!this.interstitialLoaded) {
-      console.log('⏭️ Interstitial not loaded yet, reloading...');
       this.loadInterstitialAd();
       return false;
     }
 
-    // Check frequency
     const frequency = this.config?.interstitial_ad_frequency || 3;
     this.interstitialAdShownCount++;
     
     if (this.interstitialAdShownCount % frequency !== 0) {
-      console.log(`⏭️ Interstitial show skipped - frequency check (${this.interstitialAdShownCount} % ${frequency})`);
       return false;
     }
 
     try {
-      console.log('🎬 Showing interstitial ad...');
+      // console.log('🎬 Showing interstitial ad...');
       await this.interstitialAd.show();
       this.interstitialLoaded = false; // will reload on CLOSED
       return true;
     } catch (error) {
-      console.error('❌ Failed to show interstitial ad:', error);
+      // console.error('❌ Failed to show interstitial ad:', error);
       this.interstitialLoaded = false;
       this.loadInterstitialAd();
       return false;
@@ -286,35 +295,28 @@ class AdMobService {
 
   // Rewarded Ad Methods
   loadRewardedAd(): void {
-    if (this.isExpoGo || !this.config?.show_rewarded_ads) {
-      console.log('🎁 Rewarded loading skipped - ExpoGo or disabled');
+    if (this.isAdMobUnavailable || !this.config?.show_rewarded_ads) {
       return;
     }
 
     const fromConfig = this.config?.rewarded_ad_id;
-    const test = this.config?.test_mode || FORCE_TEST_MODE;
+    const testMode = this.config?.test_mode === true;
+    const useReal = fromConfig && !this.isTestAdId(fromConfig) && !testMode;
+    const adId = useReal ? fromConfig : GOOGLE_TEST_IDS.REWARDED;
 
-    const adId = test || !fromConfig
-      ? GOOGLE_TEST_IDS.REWARDED 
-      : fromConfig;
+    // console.log(`🎁 Loading rewarded ad with ID: ${adId}`);
 
-    console.log(`🎁 Loading rewarded ad with ID: ${adId}`);
+    this.rewardedAd = RewardedAd.createForAdRequest(adId, this.getAdRequestOptions());
 
-    this.rewardedAd = RewardedAd.createForAdRequest(adId);
-    
-    // Rewarded ad-specific events
     this.rewardedAd.addAdEventListener(RewardedAdEventType.LOADED, () => {
-      console.log('✅ Rewarded ad loaded');
+      console.log('📺 Rewarded ad loaded');
     });
 
     this.rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
-      console.log('🏅 User earned reward from rewarded ad');
+      // console.log('🏅 User earned reward from rewarded ad');
     });
 
-    // Common ad events
     this.rewardedAd.addAdEventListener(AdEventType.CLOSED, () => {
-      console.log('❌ Rewarded ad closed');
-      // Reload next ad
       this.loadRewardedAd();
     });
 
@@ -322,11 +324,9 @@ class AdMobService {
   }
 
   async showRewardedAd(onRewarded: () => void): Promise<boolean> {
-    // Expo Go fallback: simulate rewarded ad with test flow
-    if (this.isExpoGo) {
-      console.log('📱 Expo Go - simulating rewarded ad');
+    // Fallback when native AdMob is unavailable: simulate rewarded flow for dev
+    if (this.isAdMobUnavailable) {
       if (!this.config?.show_rewarded_ads) {
-        console.log('🎁 Rewarded ads disabled');
         return false;
       }
 
@@ -338,12 +338,11 @@ class AdMobService {
 
       const maxAdsPerDay = this.config?.max_rewarded_ads_per_day || 5;
       if (this.rewardedAdsWatchedToday >= maxAdsPerDay) {
-        console.log('🎁 Daily rewarded ad limit reached (Expo Go)');
         return false;
       }
 
       try {
-        console.warn('⏳ Simulating rewarded ad in Expo Go (3s delay)');
+        // Simulating rewarded ad (3s delay) when native module unavailable
         // Simulate an ad playback delay
         await new Promise<void>((resolve) => setTimeout(resolve, 3000));
 
@@ -353,38 +352,32 @@ class AdMobService {
           // Try to get user ID from profile store first
           let userId = useUserStore.getState().profile?.id;
           if (!userId) {
-            console.warn('⚠️ Profile ID not in store (Expo Go), fetching profile...');
             try {
               const profileRes = await getProfile();
               userId = profileRes?.user?.id;
             } catch (e) {
-              console.warn('⚠️ Failed to fetch profile for user ID (Expo Go):', (e as any)?.message || e);
+              // ignore
             }
           }
           if (userId) {
             await api.post('/admob/rewarded-ad-completed', { user_id: userId });
-          } else {
-            console.warn('⚠️ No user ID available; skipping rewarded completion notify (Expo Go)');
           }
         } catch (error) {
-          console.error('Failed to notify backend about rewarded ad (Expo Go):', error);
+          // ignore
         }
 
         onRewarded();
         return true;
       } catch (error) {
-        console.error('Failed to simulate rewarded ad (Expo Go):', error);
         return false;
       }
     }
 
     if (!this.config?.show_rewarded_ads) {
-      console.log('🎁 Rewarded ads disabled');
       return false;
     }
 
     if (!this.rewardedAd) {
-      console.log('🎁 Rewarded ad not loaded yet');
       return false;
     }
 
@@ -397,12 +390,10 @@ class AdMobService {
 
     const maxAdsPerDay = this.config?.max_rewarded_ads_per_day || 5;
     if (this.rewardedAdsWatchedToday >= maxAdsPerDay) {
-      console.log('🎁 Daily rewarded ad limit reached');
       return false;
     }
 
     try {
-      console.log('🎬 Showing rewarded ad...');
       // Show the rewarded ad
       await this.rewardedAd.show();
       
@@ -414,35 +405,31 @@ class AdMobService {
         // Try to get user ID from profile store first, then fetch if missing
         let userId = useUserStore.getState().profile?.id;
         if (!userId) {
-          console.warn('⚠️ Profile ID not in store, fetching profile...');
           try {
             const profileRes = await getProfile();
             userId = profileRes?.user?.id;
           } catch (e) {
-            console.warn('⚠️ Failed to fetch profile for user ID:', (e as any)?.message || e);
+            // ignore
           }
         }
         if (userId) {
           await api.post('/admob/rewarded-ad-completed', { user_id: userId });
-          // Refresh user profile so points reflect immediately across app
           try {
             const profileRes = await getProfile();
             const setProfile = useUserStore.getState().setProfile;
             setProfile(profileRes?.user ? profileRes?.user : profileRes);
           } catch (e) {
-            console.warn('⚠️ Failed to refresh profile after reward:', (e as any)?.message || e);
+            // ignore
           }
           onRewarded();
-        } else {
-          console.warn('⚠️ No user ID available; skipping rewarded completion notify');
         }
       } catch (error) {
-        console.error('Failed to notify backend about rewarded ad:', error);
+        // ignore backend notify
       }
       
       return true;
     } catch (error) {
-      console.error('Failed to show rewarded ad:', error);
+      // console.error('Failed to show rewarded ad:', error);
       return false;
     }
   }

@@ -32,7 +32,7 @@ export default function WithdrawScreen() {
   const navigation = useNavigation();
   const theme = useTheme();
   const styles = createStyles(theme);
-  const { shouldShowBanner, getBannerAdId } = useAdMob();
+  const { shouldShowBanner, getBannerAdId, getAdRequestOptions } = useAdMob();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -252,7 +252,7 @@ export default function WithdrawScreen() {
       {popup?.visible && (
         <ThemedPopup visible={popup.visible} title={popup.title} message={popup.message} onConfirm={popup.onConfirm} />
       )}
-      <FixedBannerAd shouldShowBanner={shouldShowBanner} getBannerAdId={getBannerAdId} backgroundColor={theme.background} />
+      <FixedBannerAd shouldShowBanner={shouldShowBanner} getBannerAdId={getBannerAdId} requestOptions={getAdRequestOptions()} backgroundColor={theme.background} />
     </SafeAreaView>
   );
 }
