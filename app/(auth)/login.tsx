@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: typography.lg,
-    fontWeight: typography.semibold,
+    fontWeight: '600',
     color: themeColors.textMain,
     letterSpacing: 0.5,
     marginTop: spacing.lg,

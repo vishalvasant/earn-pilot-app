@@ -38,9 +38,11 @@ api.interceptors.response.use(
     return res;
   },
   (err) => {
-    // console.log('❌ API Error:', err.config?.url, err.message);
-    // if (err.response) { console.log('Response data:', err.response.data); console.log('Response status:', err.response.status); }
-    // else if (err.request) { console.log('No response received.'); console.log('Request:', err.request); }
+    // On 401, clear auth so app redirects to login
+    if (err.response?.status === 401) {
+      const { useAuthStore } = require('../stores/authStore');
+      useAuthStore.getState().clearAuthFor401?.();
+    }
     return Promise.reject(err);
   },
 );
@@ -48,53 +50,6 @@ api.interceptors.response.use(
 // ==========================
 // Authentication API Methods
 // ==========================
-
-export interface SendOtpResponse {
-  success: boolean;
-  message: string;
-  otp?: string; // Present in development mode when SMS not configured
-}
-
-export interface VerifyOtpResponse {
-  success: boolean;
-  message: string;
-  user: {
-    id: number;
-    name: string;
-    phone: string;
-    email?: string;
-    age?: number;
-    location?: string;
-    referral_code: string;
-    points_balance: string;
-    total_earned: string;
-    status: string;
-  };
-  token: string;
-}
-
-export interface VerifyOtpRequest {
-  phone: string;
-  otp: string;
-  name?: string; // Required for new users
-  referral_code?: string; // Optional referral code
-}
-
-/**
- * Send OTP to user's phone number
- */
-export const sendOtp = async (phone: string): Promise<SendOtpResponse> => {
-  const response = await api.post<SendOtpResponse>('/auth/send-otp', { phone });
-  return response.data;
-};
-
-/**
- * Verify OTP and login/register user
- */
-export const verifyOtp = async (data: VerifyOtpRequest): Promise<VerifyOtpResponse> => {
-  const response = await api.post<VerifyOtpResponse>('/auth/verify-otp', data);
-  return response.data;
-};
 
 /**
  * Get user profile
