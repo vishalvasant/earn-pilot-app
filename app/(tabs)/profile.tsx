@@ -11,6 +11,7 @@ import {
   Animated,
   Modal,
   Linking,
+  ActivityIndicator,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -36,6 +37,7 @@ function ProfileScreen() {
   const [user, setUser] = useState<any | null>(null);
   const [name, setName] = useState('');
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [logoutLoading, setLogoutLoading] = useState(false);
   const [popup, setPopup] = useState<{ visible: boolean; title: string; message: string; onConfirm?: () => void } | null>(null);
   const [supportExpanded, setSupportExpanded] = useState(false);
   const [privacyExpanded, setPrivacyExpanded] = useState(false);
@@ -111,12 +113,15 @@ function ProfileScreen() {
   };
 
   const handleLogout = async () => {
+    setShowLogoutModal(false);
+    setLogoutLoading(true);
     try {
       await logout();
       // Navigation will automatically switch to Auth stack when isAuthenticated becomes false
-      // No manual navigation needed - the RootStack in App.tsx handles this
     } catch (error) {
       setPopup({ visible: true, title: 'Error', message: 'Failed to logout. Please try again.', onConfirm: () => setPopup(null) });
+    } finally {
+      setLogoutLoading(false);
     }
   };
 
@@ -242,12 +247,22 @@ function ProfileScreen() {
               <TouchableOpacity style={[styles.modalButton, styles.cancelButton, { borderColor: theme.border }]} onPress={() => setShowLogoutModal(false)}>
                 <Text style={[styles.cancelButtonText, { color: theme.textSecondary }]}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalButton} onPress={handleLogout}>
+              <TouchableOpacity style={styles.modalButton} onPress={handleLogout} disabled={logoutLoading}>
                 <LinearGradient colors={[theme.error, '#ff4757']} style={styles.confirmButton}>
                   <Text style={styles.confirmButtonText}>Logout</Text>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Logout loading overlay */}
+      <Modal visible={logoutLoading} transparent animationType="fade" statusBarTranslucent hardwareAccelerated>
+        <View style={[styles.loadingOverlay, { backgroundColor: theme.background || '#05080F' }]}>
+          <View style={[styles.loadingContainer, { backgroundColor: theme.card || '#111721', borderColor: theme.border }]}>
+            <ActivityIndicator size="large" color={theme.primary || '#00D1FF'} style={styles.loadingSpinner} />
+            <Text style={[styles.loadingText, { color: theme.text }]}>Logging out...</Text>
           </View>
         </View>
       </Modal>
@@ -405,6 +420,28 @@ const createStyles = (theme: any) => StyleSheet.create({
   },
   confirmButtonText: {
     color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  loadingOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+    elevation: 9999,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    borderRadius: 24,
+    borderWidth: 1,
+    minWidth: 200,
+  },
+  loadingSpinner: {
+    marginBottom: 16,
+  },
+  loadingText: {
     fontSize: 16,
     fontWeight: '600',
   },

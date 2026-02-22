@@ -38,6 +38,8 @@ interface AuthState {
   googleSignIn: () => Promise<{ is_new_user: boolean; user: User; token: string } | void>;
   clearNewUserPendingReferral: () => void;
   logout: () => Promise<void>;
+  /** Called on 401 – clears local auth only (no API call). Navigator will redirect to login. */
+  clearAuthFor401: () => Promise<void>;
   clearError: () => void;
 }
 
@@ -121,7 +123,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       // Extract ID token from the correct location
       // GoogleSignin.signIn() returns: { idToken, user: {...} } or { data: { idToken, user: {...} } }
-      const idToken = userInfo.idToken || userInfo.data?.idToken || (userInfo as any).idToken;
+      // Type definitions may omit idToken; use fallback chain for runtime shape
+      const idToken = (userInfo as any).idToken ?? (userInfo as any).data?.idToken;
       
       if (!idToken) {
         console.error('No idToken found in response. Full response:', JSON.stringify(userInfo, null, 2));
@@ -242,18 +245,40 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   logout: async () => {
     try {
+      const token = get().token;
+      // Call APIs before clearing – device deactivate needs valid token; logout invalidates token
+      if (token) {
+        try {
+          const { cleanupDeviceToken } = await import('../services/fcm');
+          await cleanupDeviceToken(token);
+        } catch (_e) { /* ignore */ }
+        try {
+          const { logout: apiLogout } = await import('../services/api');
+          await apiLogout();
+        } catch (_e) { /* ignore */ }
+      }
       await GoogleSignin.signOut();
       await auth().signOut();
       await AsyncStorage.removeItem('auth_token');
       await AsyncStorage.removeItem('user_data');
       set({ token: null, user: null, isAuthenticated: false, isNewUserPendingReferral: false });
-      
-      // Clear all stores on logout
       useDataStore.getState().clearData();
       useUserStore.getState().clearProfile();
-      console.log('✅ All stores cleared on logout');
+      console.log('✅ Logout complete');
     } catch (error) {
       console.error('Logout error:', error);
+    }
+  },
+
+  clearAuthFor401: async () => {
+    try {
+      await AsyncStorage.removeItem('auth_token');
+      await AsyncStorage.removeItem('user_data');
+      set({ token: null, user: null, isAuthenticated: false, isNewUserPendingReferral: false });
+      useDataStore.getState().clearData();
+      useUserStore.getState().clearProfile();
+    } catch (e) {
+      console.error('clearAuthFor401 error:', e);
     }
   },
 
