@@ -342,7 +342,7 @@ export default function GamesScreen() {
             },
           ]}
         >
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Text style={styles.backIcon}>←</Text>
           </TouchableOpacity>
           <View style={styles.headerContent}>
@@ -371,7 +371,7 @@ export default function GamesScreen() {
                 activeOpacity={0.8}
               >
                 <LinearGradient
-                  colors={getGameGradient(gameConfig.slug)}
+                  colors={[...getGameGradient(gameConfig.slug)]}
                   style={styles.gameIconBg}
                 >
                   <Text style={styles.gameIcon}>{getGameIcon(gameConfig.slug)}</Text>

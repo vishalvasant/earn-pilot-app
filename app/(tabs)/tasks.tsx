@@ -13,7 +13,7 @@ interface Task {
   category?: string;
   reward_points: number;
   type?: string;
-  status: string;
+  status?: string;
   disabled?: boolean;
   has_subtasks?: boolean;
   subtasks?: any[];
