@@ -5,6 +5,7 @@ import { useTheme } from '../../hooks/useTheme';
 import { useDataStore } from '../../stores/dataStore';
 import { useAdMob } from '../../hooks/useAdMob';
 import FixedBannerAd from '../../components/FixedBannerAd';
+import Skeleton from '../../components/Skeleton';
 
 interface Task {
   id: number;
@@ -26,7 +27,7 @@ export default function TasksScreen() {
   const theme = useTheme();
   // const navigation = useNavigation();
   const navigation = useNavigation<any>();
-  const { shouldShowBanner, getBannerAdId, getAdRequestOptions } = useAdMob();
+  const { shouldShowBanner, getBannerAdId, getBannerAdIds, getAdRequestOptions } = useAdMob();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -143,8 +144,35 @@ export default function TasksScreen() {
           </View>
 
           {loading ? (
-            <View style={{ alignItems: 'center', justifyContent: 'center', paddingVertical: 40 }}>
-              <ActivityIndicator size="large" color={theme.primary} />
+            <View style={{ paddingHorizontal: 20, paddingTop: 8 }}>
+              <Skeleton width={140} height={12} style={{ marginBottom: 16 }} borderRadius={4} />
+              <View style={[styles.filterContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <View style={{ flexDirection: 'row', padding: 4 }}>
+                  <Skeleton width="33%" height={44} borderRadius={12} style={{ marginHorizontal: 2 }} />
+                  <Skeleton width="33%" height={44} borderRadius={12} style={{ marginHorizontal: 2 }} />
+                  <Skeleton width="33%" height={44} borderRadius={12} style={{ marginHorizontal: 2 }} />
+                </View>
+              </View>
+              {[1, 2, 3].map((i) => (
+                <View key={i} style={{ marginTop: 24 }}>
+                  <View style={styles.categoryHeader}>
+                    <Skeleton width={34} height={34} borderRadius={8} />
+                    <View style={{ flex: 1, marginLeft: 14 }}>
+                      <Skeleton width={120} height={18} borderRadius={4} />
+                      <Skeleton width={60} height={13} style={{ marginTop: 6 }} borderRadius={4} />
+                    </View>
+                  </View>
+                  <View style={{ marginTop: 12, marginHorizontal: 0, gap: 10 }}>
+                    {[1, 2, 3].map((j) => (
+                      <View key={j} style={[styles.listItem, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                        <Skeleton width="70%" height={18} borderRadius={4} />
+                        <Skeleton width="50%" height={14} style={{ marginTop: 8 }} borderRadius={4} />
+                        <Skeleton width={50} height={32} borderRadius={10} style={{ position: 'absolute', right: 18, top: 16 }} />
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ))}
             </View>
           ) : (
             <>
@@ -240,6 +268,7 @@ export default function TasksScreen() {
       <FixedBannerAd
         shouldShowBanner={shouldShowBanner}
         getBannerAdId={getBannerAdId}
+        getBannerAdIds={getBannerAdIds}
         requestOptions={getAdRequestOptions()}
         backgroundColor={theme.background}
       />

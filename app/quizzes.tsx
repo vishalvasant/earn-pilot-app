@@ -14,6 +14,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../hooks/useTheme';
 import { api } from '../services/api';
+import Skeleton from '../components/Skeleton';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -73,12 +74,38 @@ export default function QuizzesScreen() {
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={[styles.loadingText, { color: theme.text }]}>
-            {mode === 'categories' ? 'Loading categories...' : 'Loading quizzes...'}
-          </Text>
+        <View style={styles.topHeader}>
+          <Skeleton width={40} height={40} borderRadius={20} />
+          <Skeleton width={150} height={20} borderRadius={4} />
+          <View style={{ width: 40 }} />
         </View>
+        {mode === 'categories' ? (
+          <View style={styles.categoriesGrid}>
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <View key={i} style={[styles.categoryCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <Skeleton width={60} height={60} borderRadius={12} style={{ alignSelf: 'center', marginBottom: 12 }} />
+                <Skeleton width="80%" height={18} borderRadius={4} style={{ alignSelf: 'center', marginBottom: 6 }} />
+                <Skeleton width="60%" height={14} borderRadius={4} style={{ alignSelf: 'center' }} />
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={{ paddingHorizontal: 20, paddingBottom: 30, gap: 12 }}>
+            {[1, 2, 3, 4].map((i) => (
+              <View key={i} style={[styles.quizItem, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 15, flex: 1 }}>
+                  <Skeleton width={36} height={36} borderRadius={8} />
+                  <View style={{ flex: 1, gap: 6 }}>
+                    <Skeleton width="90%" height={18} borderRadius={4} />
+                    <Skeleton width="60%" height={14} borderRadius={4} />
+                    <Skeleton width={100} height={12} borderRadius={4} />
+                  </View>
+                </View>
+                <Skeleton width={50} height={24} borderRadius={6} />
+              </View>
+            ))}
+          </View>
+        )}
       </SafeAreaView>
     );
   }

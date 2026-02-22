@@ -58,10 +58,21 @@ export interface AdMobConfig {
   interstitial_ad_frequency: number;
   rewarded_ad_points_bonus: number;
   max_rewarded_ads_per_day: number;
-  // Quiz ad settings are per-quiz (from quiz payload), not from AdMob config
-  // Platform specific ad unit IDs
+  // AdMob IDs
+  admob_banner_ad_id?: string;
+  admob_interstitial_ad_id?: string;
+  admob_rewarded_ad_id?: string;
+  // Ad Manager ad unit paths (fallback when AdMob fails)
+  ad_manager_banner_ad_tag?: string;
+  ad_manager_interstitial_ad_tag?: string;
+  ad_manager_rewarded_ad_tag?: string;
+  // Priority: 'admob' | 'ad_manager' - which to try first per ad type
+  banner_priority?: string;
+  interstitial_priority?: string;
+  rewarded_priority?: string;
+  // Legacy (backward compat)
   banner_ad_id?: string;
-  banner_ad_tag?: string; // Google Ad Manager tag (e.g., /23329430372/banne)
+  banner_ad_tag?: string;
   interstitial_ad_id?: string;
   rewarded_ad_id?: string;
   native_ad_id?: string;
@@ -73,7 +84,9 @@ class AdMobService {
   private initialized = false;
   private interstitialAd: any | null = null;
   private interstitialLoaded = false;
+  private interstitialTriedFallback = false;
   private rewardedAd: any | null = null;
+  private rewardedTriedFallback = false;
   private interstitialAdShownCount = 0;
   private rewardedAdsWatchedToday = 0;
   private lastRewardedAdDate: string | null = null;
@@ -189,25 +202,29 @@ class AdMobService {
     return !id || id.startsWith('ca-app-pub-3940256099942544');
   }
 
-  // Banner Ad Methods
-  getBannerAdId(): string {
-    const adTag = this.config?.banner_ad_tag;
-    const fromConfig = this.config?.banner_ad_id;
-    const testMode = this.config?.test_mode === true;
-
+  // Banner Ad: returns [primaryId, fallbackId | null] based on priority. App tries primary first, falls back on failure.
+  getBannerAdIds(): [string, string | null] {
     if (this.isAdMobUnavailable) {
-      return GOOGLE_TEST_IDS.BANNER;
+      return [GOOGLE_TEST_IDS.BANNER, null];
     }
+    const testMode = this.config?.test_mode === true;
+    const admobId = this.config?.admob_banner_ad_id ?? this.config?.banner_ad_id;
+    const adManagerTag = this.config?.ad_manager_banner_ad_tag ?? this.config?.banner_ad_tag;
+    const priority = this.config?.banner_priority ?? 'admob';
 
-    if (adTag) {
-      return adTag;
+    const admob = (testMode || !admobId || this.isTestAdId(admobId)) ? GOOGLE_TEST_IDS.BANNER : admobId;
+    const adManager = adManagerTag?.trim() || null;
+
+    if (priority === 'ad_manager' && adManager) {
+      return [adManager, admob];
     }
+    return [admob, adManager];
+  }
 
-    if (testMode || !fromConfig || this.isTestAdId(fromConfig)) {
-      return GOOGLE_TEST_IDS.BANNER;
-    }
-
-    return fromConfig;
+  /** Single ID for backward compat; returns primary. */
+  getBannerAdId(): string {
+    const [primary] = this.getBannerAdIds();
+    return primary;
   }
 
   shouldShowBannerAd(): boolean {
@@ -223,37 +240,60 @@ class AdMobService {
       : {};
   }
 
-  // Interstitial Ad Methods
-  loadInterstitialAd(): void {
-    if (this.isAdMobUnavailable || !this.config?.show_interstitial_ads) {
-      return;
-    }
-
-    const fromConfig = this.config?.interstitial_ad_id;
+  private getInterstitialAdIds(): [string, string | null] {
+    if (this.isAdMobUnavailable) return [GOOGLE_TEST_IDS.INTERSTITIAL, null];
     const testMode = this.config?.test_mode === true;
-    const useReal = fromConfig && !this.isTestAdId(fromConfig) && !testMode;
-    const adId = useReal ? fromConfig : GOOGLE_TEST_IDS.INTERSTITIAL;
+    const admobId = this.config?.admob_interstitial_ad_id ?? this.config?.interstitial_ad_id;
+    const adManagerTag = this.config?.ad_manager_interstitial_ad_tag;
+    const priority = this.config?.interstitial_priority ?? 'admob';
 
-    // console.log(`⏭️ Loading interstitial ad with ID: ${adId}`);
+    const admob = (testMode || !admobId || this.isTestAdId(admobId)) ? GOOGLE_TEST_IDS.INTERSTITIAL : admobId;
+    const adManager = adManagerTag?.trim() || null;
+    return priority === 'ad_manager' && adManager ? [adManager, admob] : [admob, adManager];
+  }
+
+  private getRewardedAdIds(): [string, string | null] {
+    if (this.isAdMobUnavailable) return [GOOGLE_TEST_IDS.REWARDED, null];
+    const testMode = this.config?.test_mode === true;
+    const admobId = this.config?.admob_rewarded_ad_id ?? this.config?.rewarded_ad_id;
+    const adManagerTag = this.config?.ad_manager_rewarded_ad_tag;
+    const priority = this.config?.rewarded_priority ?? 'admob';
+
+    const admob = (testMode || !admobId || this.isTestAdId(admobId)) ? GOOGLE_TEST_IDS.REWARDED : admobId;
+    const adManager = adManagerTag?.trim() || null;
+    return priority === 'ad_manager' && adManager ? [adManager, admob] : [admob, adManager];
+  }
+
+  loadInterstitialAd(): void {
+    if (this.isAdMobUnavailable || !this.config?.show_interstitial_ads) return;
+    const [primary, fallback] = this.getInterstitialAdIds();
+    const adId = this.interstitialTriedFallback ? (fallback ?? primary) : primary;
+    this.interstitialTriedFallback = false;
 
     this.interstitialAd = InterstitialAd.createForAdRequest(adId, this.getAdRequestOptions());
     this.interstitialLoaded = false;
-    
+
     this.interstitialAd.addAdEventListener(AdEventType.LOADED, () => {
       this.interstitialLoaded = true;
       console.log('📺 Interstitial ad loaded');
     });
 
     this.interstitialAd.addAdEventListener(AdEventType.CLOSED, () => {
-      // console.log('❌ Interstitial ad closed');
       this.interstitialLoaded = false;
+      this.interstitialTriedFallback = false;
       this.loadInterstitialAd();
     });
 
     this.interstitialAd.addAdEventListener(AdEventType.ERROR, (error: any) => {
       console.warn('📺 Interstitial error:', error?.message || error);
       this.interstitialLoaded = false;
-      this.loadInterstitialAd();
+      if (fallback && !this.interstitialTriedFallback) {
+        this.interstitialTriedFallback = true;
+        this.loadInterstitialAd();
+      } else {
+        this.interstitialTriedFallback = false;
+        this.loadInterstitialAd();
+      }
     });
 
     this.interstitialAd.load();
@@ -293,18 +333,11 @@ class AdMobService {
     }
   }
 
-  // Rewarded Ad Methods
   loadRewardedAd(): void {
-    if (this.isAdMobUnavailable || !this.config?.show_rewarded_ads) {
-      return;
-    }
-
-    const fromConfig = this.config?.rewarded_ad_id;
-    const testMode = this.config?.test_mode === true;
-    const useReal = fromConfig && !this.isTestAdId(fromConfig) && !testMode;
-    const adId = useReal ? fromConfig : GOOGLE_TEST_IDS.REWARDED;
-
-    // console.log(`🎁 Loading rewarded ad with ID: ${adId}`);
+    if (this.isAdMobUnavailable || !this.config?.show_rewarded_ads) return;
+    const [primary, fallback] = this.getRewardedAdIds();
+    const adId = this.rewardedTriedFallback ? (fallback ?? primary) : primary;
+    this.rewardedTriedFallback = false;
 
     this.rewardedAd = RewardedAd.createForAdRequest(adId, this.getAdRequestOptions());
 
@@ -312,12 +345,22 @@ class AdMobService {
       console.log('📺 Rewarded ad loaded');
     });
 
-    this.rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {
-      // console.log('🏅 User earned reward from rewarded ad');
-    });
+    this.rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {});
 
     this.rewardedAd.addAdEventListener(AdEventType.CLOSED, () => {
+      this.rewardedTriedFallback = false;
       this.loadRewardedAd();
+    });
+
+    this.rewardedAd.addAdEventListener(AdEventType.ERROR, (error: any) => {
+      console.warn('📺 Rewarded error:', error?.message || error);
+      if (fallback && !this.rewardedTriedFallback) {
+        this.rewardedTriedFallback = true;
+        this.loadRewardedAd();
+      } else {
+        this.rewardedTriedFallback = false;
+        this.loadRewardedAd();
+      }
     });
 
     this.rewardedAd.load();

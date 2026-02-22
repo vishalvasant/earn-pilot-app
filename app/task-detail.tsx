@@ -23,6 +23,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useDataStore } from '../stores/dataStore';
 import { useUserStore } from '../stores/userStore';
 import ThemedPopup from '../components/ThemedPopup';
+import Skeleton from '../components/Skeleton';
 
 const { width, height } = Dimensions.get('window');
 
@@ -55,7 +56,7 @@ export default function TaskDetailScreen() {
   const navigation = useNavigation();
   const { taskId } = route.params || {};
   const theme = useTheme();
-  const { showInterstitial, shouldShowBanner, getBannerAdId, getAdRequestOptions } = useAdMob();
+  const { showInterstitial, showRewarded, config, shouldShowBanner, getBannerAdId, getBannerAdIds, getAdRequestOptions } = useAdMob();
   
   const [task, setTask] = useState<TaskDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -163,11 +164,10 @@ export default function TaskDetailScreen() {
       return;
     }
 
-    try {
-      // Show an interstitial before completing a subtask
-      try { await showInterstitial(); } catch {}
+    const doComplete = async () => {
       setCompletingSubtask(subtask.id);
-      const response = await api.post(`/tasks/subtasks/${subtask.id}/complete`);
+      try {
+        const response = await api.post(`/tasks/subtasks/${subtask.id}/complete`);
       
       if (response.data.success) {
         setActiveSubtask(null);
@@ -237,14 +237,23 @@ export default function TaskDetailScreen() {
           // ignore profile refresh errors
         }
       }
-    } catch (error: any) {
-      console.error('Error completing subtask:', error);
-      showPopup(
-        'Error',
-        error.response?.data?.message || 'Failed to complete subtask'
-      );
-    } finally {
-      setCompletingSubtask(null);
+      } catch (error: any) {
+        console.error('Error completing subtask:', error);
+        showPopup(
+          'Error',
+          error.response?.data?.message || 'Failed to complete subtask'
+        );
+      } finally {
+        setCompletingSubtask(null);
+      }
+    };
+
+    if (config?.show_rewarded_ads) {
+      const shown = await showRewarded(() => { doComplete(); });
+      if (!shown) await doComplete();
+    } else {
+      try { await showInterstitial(); } catch {}
+      await doComplete();
     }
   };
 
@@ -277,11 +286,40 @@ export default function TaskDetailScreen() {
   if (loading || showingAd) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={[styles.loadingText, { color: theme.text }]}>
-            {showingAd ? 'Loading ad...' : 'Loading task details...'}
-          </Text>
+        <View style={styles.topHeader}>
+          <Skeleton width={40} height={40} borderRadius={20} />
+          <Skeleton width={140} height={20} borderRadius={4} />
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={{ paddingHorizontal: 20, marginTop: 20 }}>
+          <View style={[styles.taskHeaderCard, { borderColor: theme.border, backgroundColor: theme.card }]}>
+            <Skeleton width="70%" height={24} borderRadius={4} />
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 }}>
+              <View style={{ gap: 6 }}>
+                <Skeleton width={60} height={12} borderRadius={4} />
+                <Skeleton width={80} height={24} borderRadius={4} />
+              </View>
+            </View>
+          </View>
+          <Skeleton width={100} height={12} style={{ marginTop: 24, marginBottom: 12 }} borderRadius={4} />
+          <View style={[styles.descriptionCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Skeleton width="100%" height={16} borderRadius={4} />
+            <Skeleton width="90%" height={16} style={{ marginTop: 8 }} borderRadius={4} />
+            <Skeleton width="70%" height={16} style={{ marginTop: 8 }} borderRadius={4} />
+          </View>
+          <Skeleton width={80} height={12} style={{ marginTop: 24, marginBottom: 12 }} borderRadius={4} />
+          {[1, 2, 3].map((i) => (
+            <View key={i} style={[styles.subtaskItem, { backgroundColor: theme.card, borderColor: theme.border }]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15, flex: 1 }}>
+                <Skeleton width={36} height={36} borderRadius={8} />
+                <View style={{ flex: 1, gap: 6 }}>
+                  <Skeleton width="80%" height={18} borderRadius={4} />
+                  <Skeleton width="50%" height={14} borderRadius={4} />
+                </View>
+              </View>
+              <Skeleton width={50} height={24} borderRadius={6} />
+            </View>
+          ))}
         </View>
       </SafeAreaView>
     );
@@ -566,6 +604,7 @@ export default function TaskDetailScreen() {
       <FixedBannerAd
         shouldShowBanner={shouldShowBanner}
         getBannerAdId={getBannerAdId}
+        getBannerAdIds={getBannerAdIds}
         requestOptions={getAdRequestOptions()}
         backgroundColor={theme.background}
       />

@@ -34,6 +34,7 @@ import ThemedPopup from '../../components/ThemedPopup';
 import { useAuthStore } from '../../stores/authStore';
 import { getFCMToken, registerDeviceToken, setupMessageHandlers } from '../../services/fcm';
 import FixedBannerAd from '../../components/FixedBannerAd';
+import Skeleton from '../../components/Skeleton';
 import { UnityLauncherService } from '../../services/unityLauncher';
 import { APP_CONFIG } from '../../config/app';
 import { Linking } from 'react-native';
@@ -56,7 +57,7 @@ const getGreeting = () => {
 export default function HomeScreen() {
   const navigation = useNavigation();
   const theme = useTheme();
-  const { shouldShowBanner, getBannerAdId, getAdRequestOptions, showInterstitial } = useAdMob();
+  const { shouldShowBanner, getBannerAdId, getBannerAdIds, getAdRequestOptions, showInterstitial } = useAdMob();
   const token = useAuthStore(state => state.token);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -204,16 +205,16 @@ export default function HomeScreen() {
             setHeroSlides([]);
           }),
 
-          // Add-On games (Unity) list
-          api.get('/unity-open/games')
-            .then(response => {
-              const games: AddOnGame[] = response.data?.games || [];
-              setAddOnGames(games);
-            })
-            .catch(err => {
-              console.warn('Add-on games fetch error:', err);
-              setAddOnGames([]);
-            }),
+          // Add-On games (Unity) – COMMENTED: not using add-on games as of now
+          // api.get('/unity-open/games')
+          //   .then(response => {
+          //     const games: AddOnGame[] = response.data?.games || [];
+          //     setAddOnGames(games);
+          //   })
+          //   .catch(err => {
+          //     console.warn('Add-on games fetch error:', err);
+          //     setAddOnGames([]);
+          //   }),
         ]);
         
         // Update user store profile if dataStore has it
@@ -555,6 +556,50 @@ export default function HomeScreen() {
         ]}
       >
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+          {loadingDashboard ? (
+            /* Skeleton Loader */
+            <>
+              <View style={styles.topHeader}>
+                <Skeleton width={120} height={28} borderRadius={4} />
+                <Skeleton width={110} height={52} borderRadius={20} />
+              </View>
+              <View style={[styles.heroSliderContainer, { height: 200, marginHorizontal: 20, marginTop: 20, marginBottom: 20 }]}>
+                <Skeleton width="100%" height={200} borderRadius={20} />
+              </View>
+              <Skeleton width={140} height={12} style={{ marginHorizontal: 20, marginTop: 24, marginBottom: 12 }} borderRadius={4} />
+              <View style={[styles.offerwallCard, { padding: 20, marginHorizontal: 20 }]}>
+                <Skeleton width={60} height={60} style={{ alignSelf: 'center', marginBottom: 12 }} borderRadius={12} />
+                <Skeleton width={180} height={20} style={{ alignSelf: 'center', marginBottom: 8 }} borderRadius={4} />
+                <Skeleton width={120} height={16} style={{ alignSelf: 'center', marginBottom: 16 }} borderRadius={4} />
+                <Skeleton width={100} height={40} style={{ alignSelf: 'center' }} borderRadius={12} />
+              </View>
+              <Skeleton width={120} height={12} style={{ marginHorizontal: 20, marginTop: 24, marginBottom: 12 }} borderRadius={4} />
+              <View style={styles.gamesGrid}>
+                {[1, 2, 3, 4].map((i) => (
+                  <View key={i} style={[styles.gameCard, { backgroundColor: 'transparent', borderWidth: 0 }]}>
+                    <Skeleton width={50} height={50} borderRadius={12} />
+                    <Skeleton width={80} height={16} borderRadius={4} />
+                    <Skeleton width={60} height={14} borderRadius={4} />
+                  </View>
+                ))}
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, marginTop: 24 }}>
+                <Skeleton width={130} height={12} borderRadius={4} />
+                <Skeleton width={60} height={12} borderRadius={4} />
+              </View>
+              <View style={{ paddingHorizontal: 20, marginTop: 12, gap: 12 }}>
+                {[1, 2, 3].map((i) => (
+                  <View key={i} style={[styles.taskCard, { backgroundColor: 'transparent', borderWidth: 0 }]}>
+                    <Skeleton width="70%" height={18} borderRadius={4} />
+                    <Skeleton width="40%" height={14} style={{ marginTop: 8 }} borderRadius={4} />
+                    <Skeleton width={50} height={24} borderRadius={8} style={{ position: 'absolute', right: 16, top: 16 }} />
+                  </View>
+                ))}
+              </View>
+              <View style={{ height: 150 }} />
+            </>
+          ) : (
+          <>
           {/* Header */}
           <View style={styles.topHeader}>
             <Text style={[styles.logoText, { color: theme.text }]}>EARN<Text style={{ color: theme.primary }}>PILOT</Text></Text>
@@ -661,7 +706,7 @@ export default function HomeScreen() {
           }
         })()}
 
-        {/* Add-On Games */}
+        {/* Add-On Games – COMMENTED: not using add-on games as of now
         <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>ADD-ON GAMES</Text>
         {addOnGames.length > 0 ? (
           <View style={styles.addOnGamesGrid}>
@@ -703,6 +748,7 @@ export default function HomeScreen() {
             </Text>
           </View>
         )}
+        */}
 
         {/* Brain Teaser Quiz - Styled like Elite Offerwall */}
         <Text style={[styles.sectionLabel, { color: theme.textSecondary, marginTop: spacing.lg }]}>BRAIN TEASER QUIZ</Text>
@@ -829,197 +875,12 @@ export default function HomeScreen() {
 
         {/* Bottom spacing for fixed banner ad + tab bar */}
         <View style={{ height: 150 }} />
+          </>
+          )}
         </Animated.View>
       </ScrollView>
 
-      {/* Add-On Game Modal */}
-      <Modal
-        visible={showAddOnModal && !!selectedAddOnGame}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowAddOnModal(false)}
-      >
-        <View style={styles.addOnModalOverlay}>
-          <View style={[styles.addOnModalSheet, { backgroundColor: theme.card }]}>
-            {/* Drag handle */}
-            <View style={styles.addOnModalHandle} />
-
-            {selectedAddOnGame && (
-              <>
-                {/* Header with icon and title */}
-                <View style={styles.addOnModalHeader}>
-                  <View style={styles.addOnModalIconWrapper}>
-                    <Image
-                      source={
-                        (() => {
-                          const u = selectedAddOnGame.icon_url || selectedAddOnGame.image_url;
-                          if (!u || typeof u !== 'string') return require('../../assets/images/pilot-jump.png');
-                          const uri = (u.startsWith('http://') || u.startsWith('https://')) ? u : `${getAssetBaseUrl().replace(/\/$/, '')}${u.startsWith('/') ? u : `/${u}`}`;
-                          return { uri };
-                        })()
-                      }
-                      style={styles.addOnModalIcon}
-                      resizeMode="cover"
-                    />
-                  </View>
-                  <View style={styles.addOnModalTitleBlock}>
-                    <Text style={[styles.addOnModalTitle, { color: theme.text }]} numberOfLines={1}>
-                      {selectedAddOnGame.name}
-                    </Text>
-                    <Text style={[styles.addOnModalSubtitle, { color: theme.textSecondary }]}>
-                      Add-On Game · Play levels to earn energy
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Body: earning instructions */}
-                <View style={styles.addOnModalBody}>
-                  <Text style={[styles.addOnModalSectionLabel, { color: theme.textSecondary }]}>
-                    HOW YOU EARN POINTS
-                  </Text>
-
-                  <View style={styles.addOnModalInfoCard}>
-                    {/* High-level earning summary */}
-                    <Text style={[styles.addOnModalDescription, { color: theme.text }]}>
-                      {(() => {
-                        const pts = selectedAddOnGame.points_per_completion ?? 0;
-                        const interval = selectedAddOnGame.points_interval_levels ?? 1;
-                        if (pts > 0 && interval === 1) {
-                          return `You earn ${pts} energy points for every level you complete in this game.`;
-                        }
-                        if (pts > 0 && interval > 1) {
-                          return `You earn ${pts} energy points when you complete milestone levels ${interval}, ${interval * 2}, ${interval * 3} and so on.`;
-                        }
-                        return 'Complete levels in this Unity game to earn energy points and boost your rewards inside EarnPilot.';
-                      })()}
-                    </Text>
-
-                    {/* Optional extra description from admin */}
-                    {selectedAddOnGame.description && (
-                      <Text style={[styles.addOnModalDescription, { color: theme.text }]}>
-                        {selectedAddOnGame.description}
-                      </Text>
-                    )}
-
-                    <View style={styles.addOnModalBulletList}>
-                      {typeof selectedAddOnGame.points_per_completion === 'number' &&
-                        selectedAddOnGame.points_per_completion > 0 && (
-                        <Text style={[styles.addOnModalBullet, { color: theme.textSecondary }]}>
-                          • Base reward:{' '}
-                          <Text style={styles.addOnModalBulletHighlight}>
-                            {selectedAddOnGame.points_per_completion} energy points per reward event
-                          </Text>
-                        </Text>
-                      )}
-
-                      {typeof selectedAddOnGame.points_interval_levels === 'number' &&
-                        selectedAddOnGame.points_interval_levels > 0 && (
-                        <Text style={[styles.addOnModalBullet, { color: theme.textSecondary }]}>
-                          • Reward interval:{' '}
-                          <Text style={styles.addOnModalBulletHighlight}>
-                            every {selectedAddOnGame.points_interval_levels} level
-                            {selectedAddOnGame.points_interval_levels > 1 ? 's' : ''} completed
-                          </Text>
-                        </Text>
-                      )}
-
-                      {typeof selectedAddOnGame.daily_play_limit === 'number' &&
-                        selectedAddOnGame.daily_play_limit > 0 && (
-                        <Text style={[styles.addOnModalBullet, { color: theme.textSecondary }]}>
-                          • Daily limit:{' '}
-                          <Text style={styles.addOnModalBulletHighlight}>
-                            up to {selectedAddOnGame.daily_play_limit} plays per day
-                          </Text>
-                        </Text>
-                      )}
-
-                      {typeof selectedAddOnGame.play_cooldown_seconds === 'number' &&
-                        selectedAddOnGame.play_cooldown_seconds > 0 && (
-                        <Text style={[styles.addOnModalBullet, { color: theme.textSecondary }]}>
-                          • Cooldown between sessions:{' '}
-                          <Text style={styles.addOnModalBulletHighlight}>
-                            {Math.ceil(selectedAddOnGame.play_cooldown_seconds / 60)} min
-                          </Text>
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-                </View>
-
-                {/* Footer buttons: Cancel + Download (if app not installed) or Play (if installed) */}
-                <View style={styles.addOnModalFooter}>
-                  <TouchableOpacity
-                    style={[styles.addOnModalButton, styles.addOnModalCancelButton, { borderColor: theme.border }]}
-                    onPress={() => {
-                      setShowAddOnModal(false);
-                      setSelectedAddOnGame(null);
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[styles.addOnModalButtonText, { color: theme.textSecondary }]}>
-                      Cancel
-                    </Text>
-                  </TouchableOpacity>
-
-                  {addOnGameInstalled === false && (selectedAddOnGame.store_url || selectedAddOnGame.package_name) ? (
-                    <TouchableOpacity
-                      style={[styles.addOnModalButton, styles.addOnModalPlayButton, { backgroundColor: theme.primary }]}
-                      activeOpacity={0.9}
-                      onPress={() => {
-                        const url = selectedAddOnGame.store_url?.trim() ||
-                          (selectedAddOnGame.package_name
-                            ? `${APP_CONFIG.ADDON_GAME_STORE_URL}${encodeURIComponent(selectedAddOnGame.package_name.trim())}`
-                            : null);
-                        if (url) Linking.openURL(url).catch((err: any) => console.error('Failed to open store URL:', err));
-                        setShowAddOnModal(false);
-                        setSelectedAddOnGame(null);
-                      }}
-                    >
-                      <Text style={[styles.addOnModalButtonText, { color: theme.background }]}>
-                        Download
-                      </Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity
-                      style={[styles.addOnModalButton, styles.addOnModalPlayButton, { backgroundColor: theme.primary }]}
-                      activeOpacity={0.9}
-                      disabled={addOnGameInstalled === null && !!selectedAddOnGame.package_name}
-                      onPress={async () => {
-                        if (!selectedAddOnGame) return;
-                        try {
-                          if (!token || !profile?.id) {
-                            Alert.alert('Authentication Required', 'Please login to play games');
-                            return;
-                          }
-                          await UnityLauncherService.launchUnityGame({
-                            authToken: token,
-                            userId: profile.id,
-                            userEmail: profile.email,
-                            gameId: selectedAddOnGame.id,
-                          });
-                          setShowAddOnModal(false);
-                          setSelectedAddOnGame(null);
-                        } catch (error: any) {
-                          console.error(`[HomeScreen] Failed to launch ${selectedAddOnGame.name}:`, error);
-                          Alert.alert(
-                            'Launch Failed',
-                            `Failed to launch ${selectedAddOnGame.name}: ${error.message}`,
-                            [{ text: 'OK' }],
-                          );
-                        }
-                      }}
-                    >
-                      <Text style={[styles.addOnModalButtonText, { color: theme.background }]}>
-                        {addOnGameInstalled === null && selectedAddOnGame.package_name ? 'Checking...' : 'Play'}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
+      {/* Add-On Game Modal – not using add-on games as of now */}
 
       {/* Cooldown Popup */}
       <ThemedPopup
@@ -1033,6 +894,7 @@ export default function HomeScreen() {
       <FixedBannerAd
         shouldShowBanner={shouldShowBanner}
         getBannerAdId={getBannerAdId}
+        getBannerAdIds={getBannerAdIds}
         requestOptions={getAdRequestOptions()}
         backgroundColor={theme.background}
       />

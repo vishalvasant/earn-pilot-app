@@ -70,6 +70,10 @@ export function useAdMob() {
     return admobService.getBannerAdId();
   }, []);
 
+  const getBannerAdIds = useCallback((): [string, string | null] => {
+    return admobService.getBannerAdIds();
+  }, []);
+
   const getAdRequestOptions = useCallback(() => {
     return admobService.getAdRequestOptions();
   }, []);
@@ -83,6 +87,7 @@ export function useAdMob() {
     getRewardedAdBonus,
     shouldShowBanner,
     getBannerAdId,
+    getBannerAdIds,
     getAdRequestOptions,
   };
 }

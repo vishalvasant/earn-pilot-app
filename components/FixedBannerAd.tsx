@@ -16,24 +16,36 @@ const { width: screenWidth } = Dimensions.get('window');
 
 interface FixedBannerAdProps {
   shouldShowBanner: boolean;
+  /** Returns primary ID; fallback supported via getBannerAdIds. */
   getBannerAdId: () => string;
-  /** Optional request options (e.g. location for geo-targeting). */
+  /** [primary, fallback]: try primary first, on failure try fallback. If not provided, uses getBannerAdId only. */
+  getBannerAdIds?: () => [string, string | null];
   requestOptions?: { location?: { latitude: number; longitude: number; accuracy?: number } };
   backgroundColor?: string;
 }
 
-function FixedBannerAd({ shouldShowBanner, getBannerAdId, requestOptions, backgroundColor = '#111721' }: FixedBannerAdProps) {
+function FixedBannerAd({ shouldShowBanner, getBannerAdId, getBannerAdIds, requestOptions, backgroundColor = '#111721' }: FixedBannerAdProps) {
   const [loadFailed, setLoadFailed] = useState(false);
+  const [useFallback, setUseFallback] = useState(false);
   // Tab bar is 65px high + 15px margin from bottom = 80px
   const BANNER_HEIGHT = 50;
   const TAB_BAR_TOTAL_HEIGHT = 80;
 
-  const unitId = getBannerAdId();
+  const ids = getBannerAdIds ? getBannerAdIds() : [getBannerAdId(), null];
+  const unitId = useFallback && ids[1] ? ids[1] : ids[0];
 
-  // When no-fill or other load failure: hide the banner bar so we don't show an empty frame
+  // When both primary and fallback failed: hide the banner
   if (shouldShowBanner && loadFailed) {
     return null;
   }
+
+  const handleLoadFailure = () => {
+    if (ids[1] && !useFallback) {
+      setUseFallback(true);
+    } else {
+      setLoadFailed(true);
+    }
+  };
 
   return (
     <View
@@ -49,13 +61,14 @@ function FixedBannerAd({ shouldShowBanner, getBannerAdId, requestOptions, backgr
       {shouldShowBanner && BannerAd ? (
         <View style={styles.bannerAdWrapper}>
           <BannerAd
+            key={unitId}
             unitId={unitId}
             size={BannerAdSize.BANNER}
             requestOptions={requestOptions}
-            onAdLoaded={() => setLoadFailed(false)}
+            onAdLoaded={() => { setLoadFailed(false); setUseFallback(false); }}
             onAdFailedToLoad={() => {
-              console.log('📺 Banner: no-fill or load failed');
-              setLoadFailed(true);
+              console.log('📺 Banner: load failed, trying fallback if available');
+              handleLoadFailure();
             }}
           />
         </View>

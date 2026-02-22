@@ -23,6 +23,7 @@ import { useDataStore } from '../../stores/dataStore';
 import ThemedPopup from '../../components/ThemedPopup';
 import { useAdMob } from '../../hooks/useAdMob';
 import FixedBannerAd from '../../components/FixedBannerAd';
+import Skeleton from '../../components/Skeleton';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { Share } from 'react-native';
 import { APP_CONFIG } from '../../config/app';
@@ -30,12 +31,13 @@ import { APP_CONFIG } from '../../config/app';
 function ProfileScreen() {
   const theme = useTheme();
   const navigation = useNavigation();
-  const { shouldShowBanner, getBannerAdId, getAdRequestOptions } = useAdMob();
+  const { shouldShowBanner, getBannerAdId, getBannerAdIds, getAdRequestOptions } = useAdMob();
   const logout = useAuthStore((s) => s.logout);
   const setProfileInStore = useUserStore((s) => s.setProfile);
 
   const [user, setUser] = useState<any | null>(null);
   const [name, setName] = useState('');
+  const [profileLoading, setProfileLoading] = useState(true);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
   const [popup, setPopup] = useState<{ visible: boolean; title: string; message: string; onConfirm?: () => void } | null>(null);
@@ -50,6 +52,7 @@ function ProfileScreen() {
 
   const loadProfile = useCallback(async () => {
     try {
+      setProfileLoading(true);
       const data = await getProfile();
       const u = (data && (data.user || data.data?.user || data)) || {};
       setUser(u);
@@ -59,6 +62,8 @@ function ProfileScreen() {
     } catch (error) {
       setUser(null);
       setName('User');
+    } finally {
+      setProfileLoading(false);
     }
   }, [setProfileInStore]);
 
@@ -72,6 +77,7 @@ function ProfileScreen() {
         useUserStore.getState().setProfile(state.profile);
         setName((state.profile.name as string) || 'User');
         lastProfileFetchRef.current = Date.now();
+        setProfileLoading(false);
         return;
       }
       if (Date.now() - lastProfileFetchRef.current < FOCUS_CACHE_MS) return;
@@ -141,6 +147,31 @@ function ProfileScreen() {
           <View style={styles.topHeader}>
             <Text style={styles.logoText}>MY<Text style={{ color: theme.primary }}>PROFILE</Text></Text>
           </View>
+          {profileLoading ? (
+            <>
+              <View style={styles.centerProfile}>
+                <Skeleton width={80} height={80} borderRadius={40} style={{ alignSelf: 'center' }} />
+                <Skeleton width={120} height={24} style={{ alignSelf: 'center', marginTop: 16 }} borderRadius={4} />
+                <Skeleton width={100} height={20} style={{ alignSelf: 'center', marginTop: 8 }} borderRadius={4} />
+              </View>
+              <Skeleton width={80} height={12} style={{ marginHorizontal: 20, marginTop: 24, marginBottom: 12 }} borderRadius={4} />
+              <View style={[styles.listItem, { borderColor: theme.border, backgroundColor: theme.card }]}>
+                <View style={{ flex: 1, gap: 8 }}>
+                  <Skeleton width={140} height={18} borderRadius={4} />
+                  <Skeleton width={100} height={16} borderRadius={4} />
+                </View>
+                <Skeleton width={50} height={24} borderRadius={6} />
+              </View>
+              <Skeleton width={140} height={12} style={{ marginHorizontal: 20, marginTop: 24, marginBottom: 12 }} borderRadius={4} />
+              {[1, 2].map((i) => (
+                <View key={i} style={[styles.listItem, { borderColor: theme.border, backgroundColor: theme.card }]}>
+                  <Skeleton width={160} height={18} borderRadius={4} />
+                  <Skeleton width={24} height={24} borderRadius={4} />
+                </View>
+              ))}
+            </>
+          ) : (
+          <>
           <View style={styles.centerProfile}>
             <LinearGradient colors={theme.gradient.primary as [string, string, ...string[]]} style={styles.avatarSquare} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
               <Text style={{ fontSize: 35 }}>👤</Text>
@@ -165,7 +196,6 @@ function ProfileScreen() {
             </TouchableOpacity>
           </View>
         </View>
-        </Animated.View>
 
         {/* <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>Wallet</Text>
         <View style={[styles.listItem, styles.listItemAccent, { borderColor: theme.primary, backgroundColor: 'rgba(0, 209, 255, 0.05)' }]}> 
@@ -231,6 +261,9 @@ function ProfileScreen() {
         </TouchableOpacity>
 
         <View style={{ height: 150 }} />
+          </>
+          )}
+        </Animated.View>
       </ScrollView>
 
       {popup?.visible && (
@@ -271,6 +304,7 @@ function ProfileScreen() {
       <FixedBannerAd
         shouldShowBanner={shouldShowBanner}
         getBannerAdId={getBannerAdId}
+        getBannerAdIds={getBannerAdIds}
         requestOptions={getAdRequestOptions()}
         backgroundColor={theme.background}
       />

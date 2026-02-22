@@ -18,6 +18,7 @@ import { api } from '../services/api';
 import Icon from '../components/Icon';
 import ThemedPopup from '../components/ThemedPopup';
 import FixedBannerAd from '../components/FixedBannerAd';
+import Skeleton from '../components/Skeleton';
 import { useAdMob } from '../hooks/useAdMob';
 
 interface Coupon {
@@ -32,7 +33,7 @@ export default function WithdrawScreen() {
   const navigation = useNavigation();
   const theme = useTheme();
   const styles = createStyles(theme);
-  const { shouldShowBanner, getBannerAdId, getAdRequestOptions } = useAdMob();
+  const { shouldShowBanner, getBannerAdId, getBannerAdIds, getAdRequestOptions } = useAdMob();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -144,9 +145,29 @@ export default function WithdrawScreen() {
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={[styles.loadingText, { color: theme.textSecondary }]}>Loading...</Text>
+        <View style={styles.topHeader}>
+          <Skeleton width={40} height={40} borderRadius={20} />
+          <Skeleton width={120} height={20} borderRadius={4} />
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={{ paddingHorizontal: 20 }}>
+          <View style={[styles.balanceCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Skeleton width={140} height={14} borderRadius={4} />
+            <Skeleton width={120} height={28} style={{ marginTop: 12 }} borderRadius={4} />
+            <Skeleton width={180} height={14} style={{ marginTop: 8 }} borderRadius={4} />
+          </View>
+          <Skeleton width={100} height={12} style={{ marginTop: 24, marginBottom: 12 }} borderRadius={4} />
+          <View style={{ gap: 12 }}>
+            {[1, 2, 3].map((i) => (
+              <View key={i} style={[styles.couponCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <View style={{ flex: 1, gap: 6 }}>
+                  <Skeleton width={150} height={18} borderRadius={4} />
+                  <Skeleton width={100} height={14} borderRadius={4} />
+                </View>
+                <Skeleton width={80} height={36} borderRadius={10} />
+              </View>
+            ))}
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -252,7 +273,7 @@ export default function WithdrawScreen() {
       {popup?.visible && (
         <ThemedPopup visible={popup.visible} title={popup.title} message={popup.message} onConfirm={popup.onConfirm} />
       )}
-      <FixedBannerAd shouldShowBanner={shouldShowBanner} getBannerAdId={getBannerAdId} requestOptions={getAdRequestOptions()} backgroundColor={theme.background} />
+      <FixedBannerAd shouldShowBanner={shouldShowBanner} getBannerAdId={getBannerAdId} getBannerAdIds={getBannerAdIds} requestOptions={getAdRequestOptions()} backgroundColor={theme.background} />
     </SafeAreaView>
   );
 }

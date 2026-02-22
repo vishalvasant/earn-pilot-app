@@ -21,6 +21,7 @@ import { useAdMob } from '../../hooks/useAdMob';
 import Icon from '../../components/Icon';
 import ThemedPopup from '../../components/ThemedPopup';
 import FixedBannerAd from '../../components/FixedBannerAd';
+import Skeleton from '../../components/Skeleton';
 
 // Safely import BannerAd - may not be available when native module is not loaded
 let BannerAd: any = null;
@@ -44,7 +45,7 @@ export default function WalletScreen() {
   const slideAnim = useRef(new Animated.Value(50)).current;
   const balanceAnim = useRef(new Animated.Value(0)).current;
   
-  const { shouldShowBanner, getBannerAdId, getAdRequestOptions } = useAdMob();
+  const { shouldShowBanner, getBannerAdId, getBannerAdIds, getAdRequestOptions, showRewarded, getRemainingRewardedAds, getRewardedAdBonus, config } = useAdMob();
   
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -60,6 +61,7 @@ export default function WalletScreen() {
   
   // Energy conversion state
   const [showConversionModal, setShowConversionModal] = useState(false);
+  const [watchingRewardedAd, setWatchingRewardedAd] = useState(false);
   const [energyAmount, setEnergyAmount] = useState('');
   const [conversionRate, setConversionRate] = useState({ rate: 10, minRequired: 50, enabled: true });
   const [convertingEnergy, setConvertingEnergy] = useState(false);
@@ -245,20 +247,80 @@ export default function WalletScreen() {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
-      >
-        {/* Header */}
-        <Animated.View 
-          style={[
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            },
-          ]}
         >
+          {/* Header */}
+          <Animated.View 
+            style={[
+              {
+                opacity: fadeAnim,
+                transform: [{ translateY: slideAnim }],
+              },
+            ]}
+          >
           <View style={styles.topHeader}>
             <Text style={styles.logoText}>MY<Text style={{ color: theme.primary }}>WALLET</Text></Text>
           </View>
 
+          {loading ? (
+            /* Skeleton Loader */
+            <>
+              {/* Balance Card Skeleton - matches LinearGradient card layout */}
+              <View style={[styles.balanceCard, { backgroundColor: theme.primary + '25', borderWidth: 0 }]}>
+                <Skeleton width={140} height={12} borderRadius={4} />
+                <Skeleton width={140} height={36} style={{ marginTop: 12 }} borderRadius={6} />
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 15, marginTop: 24, paddingTop: 20, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.15)' }}>
+                  <View style={{ flex: 1, gap: 6 }}>
+                    <Skeleton width={50} height={10} borderRadius={4} />
+                    <Skeleton width={70} height={18} borderRadius={4} />
+                  </View>
+                  <View style={{ width: 1, height: 36, backgroundColor: 'rgba(255,255,255,0.2)' }} />
+                  <View style={{ flex: 1, gap: 6 }}>
+                    <Skeleton width={45} height={10} borderRadius={4} />
+                    <Skeleton width={65} height={18} borderRadius={4} />
+                  </View>
+                </View>
+              </View>
+
+              {/* Wallet Section Skeleton */}
+              <View style={{ paddingHorizontal: 20, marginTop: 30, gap: 15 }}>
+                <Skeleton width={60} height={11} borderRadius={4} />
+                <View style={[styles.listItem, { borderColor: theme.border, backgroundColor: theme.card }]}>
+                  <View style={{ flex: 1, gap: 6 }}>
+                    <Skeleton width={140} height={16} borderRadius={4} />
+                    <Skeleton width={200} height={12} borderRadius={4} />
+                  </View>
+                  <Skeleton width={70} height={28} borderRadius={8} />
+                </View>
+                <View style={[styles.listItem, { borderColor: theme.border, backgroundColor: theme.card }]}>
+                  <View style={{ flex: 1, gap: 6 }}>
+                    <Skeleton width={130} height={16} borderRadius={4} />
+                    <Skeleton width={180} height={12} borderRadius={4} />
+                  </View>
+                  <Skeleton width={60} height={28} borderRadius={8} />
+                </View>
+              </View>
+
+              {/* Statistics Section Skeleton */}
+              <View style={{ paddingHorizontal: 20, marginTop: 30, gap: 15 }}>
+                <Skeleton width={90} height={11} borderRadius={4} />
+                <View style={{ flexDirection: 'row', gap: 12 }}>
+                  <View style={[styles.statCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                    <Skeleton width={32} height={32} borderRadius={8} style={{ alignSelf: 'center' }} />
+                    <Skeleton width={70} height={12} borderRadius={4} />
+                    <Skeleton width={55} height={20} borderRadius={4} />
+                  </View>
+                  <View style={[styles.statCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                    <Skeleton width={32} height={32} borderRadius={8} style={{ alignSelf: 'center' }} />
+                    <Skeleton width={55} height={12} borderRadius={4} />
+                    <Skeleton width={55} height={20} borderRadius={4} />
+                  </View>
+                </View>
+              </View>
+
+              <View style={{ height: 150 }} />
+            </>
+          ) : (
+          <>
           {/* Balance Card */}
           <LinearGradient
             colors={[theme.primary, theme.primary + 'CC']}
@@ -285,7 +347,6 @@ export default function WalletScreen() {
               </View>
             </View>
           </LinearGradient>
-        </Animated.View>
 
         {/* Wallet Section */}
         <View style={{ paddingHorizontal: 20, marginTop: 30, gap: 15 }}>
@@ -302,6 +363,46 @@ export default function WalletScreen() {
             </View>
             <Text style={{ color: theme.primary, fontWeight: '800', fontSize: 12, textTransform: 'uppercase' }}>REDEEM</Text>
           </TouchableOpacity>
+
+          {/* Rewarded Ad - Watch ad for bonus points */}
+          {config?.show_rewarded_ads && (
+            <TouchableOpacity
+              style={[styles.listItem, { borderColor: theme.primary, backgroundColor: theme.card }]}
+              onPress={async () => {
+                const remaining = getRemainingRewardedAds();
+                if (remaining <= 0) {
+                  showPopup('Limit Reached', 'You\'ve reached the daily limit for rewarded ads. Come back tomorrow!');
+                  return;
+                }
+                setWatchingRewardedAd(true);
+                try {
+                  const shown = await showRewarded(() => {
+                    showPopup('Success! 🎉', `You earned ${getRewardedAdBonus()} points!`);
+                    loadWalletData();
+                  });
+                  if (!shown) {
+                    showPopup('Ad Unavailable', 'No ad available at the moment. Please try again later.');
+                  }
+                } catch (e) {
+                  showPopup('Error', 'Failed to show ad. Please try again.');
+                } finally {
+                  setWatchingRewardedAd(false);
+                }
+              }}
+              disabled={watchingRewardedAd || getRemainingRewardedAds() <= 0}
+              activeOpacity={0.8}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.listItemText, { color: theme.text }]}>Watch Ad for Points</Text>
+                <Text style={[styles.listItemDesc, { color: theme.textSecondary }]}>
+                  +{getRewardedAdBonus()} pts per ad • {getRemainingRewardedAds()} left today
+                </Text>
+              </View>
+              <Text style={{ color: theme.primary, fontWeight: '700', fontSize: 12 }}>
+                {watchingRewardedAd ? 'Loading...' : getRemainingRewardedAds() > 0 ? 'WATCH' : 'DONE'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Earned Vouchers */}
@@ -373,6 +474,9 @@ export default function WalletScreen() {
         )}
 
         <View style={{ height: 150 }} />
+          </>
+          )}
+        </Animated.View>
       </ScrollView>
 
       {/* Energy Conversion Modal */}
@@ -456,6 +560,7 @@ export default function WalletScreen() {
       <FixedBannerAd
         shouldShowBanner={shouldShowBanner}
         getBannerAdId={getBannerAdId}
+        getBannerAdIds={getBannerAdIds}
         requestOptions={getAdRequestOptions()}
         backgroundColor={theme.background}
       />

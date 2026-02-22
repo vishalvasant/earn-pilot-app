@@ -16,6 +16,7 @@ import { api } from '../services/api';
 import { useDataStore } from '../stores/dataStore';
 import ThemedPopup from '../components/ThemedPopup';
 import FixedBannerAd from '../components/FixedBannerAd';
+import Skeleton from '../components/Skeleton';
 
 type QuizOption = { id: number; option_text: string; order?: number };
 type QuizQuestion = { id: number; question_text: string; points?: number; options: QuizOption[] };
@@ -37,7 +38,7 @@ export default function QuizPlayScreen() {
   const theme = useTheme();
   const styles = useMemo(() => createStyles(theme), [theme]);
   const fetchProfile = useDataStore((s) => s.fetchProfile);
-  const { showInterstitial, shouldShowBanner, getBannerAdId, getAdRequestOptions } = useAdMob();
+  const { showInterstitial, showRewarded, config, shouldShowBanner, getBannerAdId, getBannerAdIds, getAdRequestOptions } = useAdMob();
   const prevIndexRef = useRef<number>(0);
 
   const quizId: number = route?.params?.id;
@@ -105,44 +106,62 @@ export default function QuizPlayScreen() {
   const onSubmit = async () => {
     if (!quiz) return;
 
-    try {
-      setSubmitting(true);
-      const res = await api.post(`/quizzes/${quiz.id}/submit`, { answers });
-      const data = res?.data?.data;
+    const doSubmit = async () => {
+      try {
+        setSubmitting(true);
+        const res = await api.post(`/quizzes/${quiz.id}/submit`, { answers });
+        const data = res?.data?.data;
 
-      await fetchProfile(true);
+        await fetchProfile(true);
 
-      const title = data?.passed ? 'Quiz Completed' : 'Quiz Failed';
-      const message = `${data?.message || 'Quiz submitted.'}\n\nScore: ${data?.score}%\nPoints: +${data?.points_earned ?? 0}`;
-      setResultPopup({
-        title,
-        message,
-        onConfirm: () => {
-          setResultPopup(null);
-          navigation.goBack();
-        },
-      });
-    } catch (e: any) {
-      const msg =
-        e?.response?.data?.message ||
-        e?.message ||
-        'Failed to submit quiz. Please try again.';
-      setResultPopup({
-        title: 'Error',
-        message: msg,
-        onConfirm: () => setResultPopup(null),
-      });
-    } finally {
-      setSubmitting(false);
+        const title = data?.passed ? 'Quiz Completed' : 'Quiz Failed';
+        const message = `${data?.message || 'Quiz submitted.'}\n\nScore: ${data?.score}%\nPoints: +${data?.points_earned ?? 0}`;
+        setResultPopup({
+          title,
+          message,
+          onConfirm: () => {
+            setResultPopup(null);
+            navigation.goBack();
+          },
+        });
+      } catch (e: any) {
+        const msg =
+          e?.response?.data?.message ||
+          e?.message ||
+          'Failed to submit quiz. Please try again.';
+        setResultPopup({
+          title: 'Error',
+          message: msg,
+          onConfirm: () => setResultPopup(null),
+        });
+      } finally {
+        setSubmitting(false);
+      }
+    };
+
+    if (config?.show_rewarded_ads) {
+      const shown = await showRewarded(() => { doSubmit(); });
+      if (!shown) await doSubmit();
+    } else {
+      await doSubmit();
     }
   };
 
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-        <View style={styles.loading}>
-          <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={[styles.loadingText, { color: theme.text }]}>Loading quiz...</Text>
+        <View style={{ paddingHorizontal: 20, paddingTop: 50, paddingBottom: 24 }}>
+          <Skeleton width={80} height={14} style={{ marginBottom: 24 }} borderRadius={4} />
+          <Skeleton width="100%" height={20} borderRadius={4} />
+          <Skeleton width="90%" height={16} style={{ marginTop: 12 }} borderRadius={4} />
+          <View style={{ marginTop: 24, gap: 12 }}>
+            {[1, 2, 3, 4].map((i) => (
+              <View key={i} style={[styles.option, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <Skeleton width="85%" height={18} borderRadius={4} />
+              </View>
+            ))}
+          </View>
+          <Skeleton width={120} height={48} style={{ marginTop: 32, alignSelf: 'flex-end' }} borderRadius={12} />
         </View>
         {resultPopup && (
           <ThemedPopup
@@ -289,6 +308,7 @@ export default function QuizPlayScreen() {
       <FixedBannerAd
         shouldShowBanner={shouldShowBanner}
         getBannerAdId={getBannerAdId}
+        getBannerAdIds={getBannerAdIds}
         requestOptions={getAdRequestOptions()}
         backgroundColor={theme.background}
       />

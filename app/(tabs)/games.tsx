@@ -36,12 +36,13 @@ import ImageSimilarityGame from '../../components/games/ImageSimilarityGame';
 import MathQuizGame from '../../components/games/MathQuizGame';
 import MemoryPatternGame from '../../components/games/MemoryPatternGame';
 import ThemedPopup from '../../components/ThemedPopup';
+import Skeleton from '../../components/Skeleton';
 
 const { width: screenWidth } = Dimensions.get('window');
 
 export default function GamesScreen() {
   const navigation = useNavigation();
-  const { shouldShowBanner, getBannerAdId, getAdRequestOptions, showInterstitial } = useAdMob();
+  const { shouldShowBanner, getBannerAdId, getBannerAdIds, getAdRequestOptions, showInterstitial } = useAdMob();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
   const isInitializingCooldowns = useRef(false);
@@ -54,6 +55,7 @@ export default function GamesScreen() {
   const profile = useUserStore(state => state.profile);
   const setProfile = useUserStore(state => state.setProfile);
 
+  const [gamesLoading, setGamesLoading] = useState(true);
   const [showCooldownPopup, setShowCooldownPopup] = useState(false);
   const [cooldownMessage, setCooldownMessage] = useState('');
   const [popupTitle, setPopupTitle] = useState('Game Complete');
@@ -63,6 +65,7 @@ export default function GamesScreen() {
   useEffect(() => {
     const initialize = async () => {
       try {
+        setGamesLoading(true);
         await loadGameConfigs();
         
         // Use profile from dataStore (shared with home screen)
@@ -85,6 +88,8 @@ export default function GamesScreen() {
         }
       } catch (e) {
         console.warn('Failed to load game configs', e);
+      } finally {
+        setGamesLoading(false);
       }
     };
 
@@ -353,7 +358,15 @@ export default function GamesScreen() {
         {/* Games Grid */}
         <Text style={styles.sectionLabel}>AVAILABLE GAMES</Text>
         <View style={styles.gamesGrid}>
-          {gameConfigs.filter(game => {
+          {gamesLoading ? (
+            [1, 2, 3, 4].map((i) => (
+              <View key={i} style={[styles.gameCard, { backgroundColor: 'transparent', borderWidth: 0 }]}>
+                <Skeleton width={50} height={50} borderRadius={12} />
+                <Skeleton width={80} height={16} borderRadius={4} />
+                <Skeleton width={60} height={14} borderRadius={4} />
+              </View>
+            ))
+          ) : gameConfigs.filter(game => {
             // Only show mini games (system games), exclude add-on games
             // Filter by is_system_game flag or check if it's NOT an add-on game
             const isMiniGame = game.is_system_game === true || (game.is_addon_game !== true && !game.package_name);
@@ -404,6 +417,7 @@ export default function GamesScreen() {
       <FixedBannerAd
         shouldShowBanner={shouldShowBanner}
         getBannerAdId={getBannerAdId}
+        getBannerAdIds={getBannerAdIds}
         requestOptions={getAdRequestOptions()}
         backgroundColor={themeColors.bgDark}
       />
