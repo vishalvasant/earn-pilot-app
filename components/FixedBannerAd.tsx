@@ -16,9 +16,8 @@ const { width: screenWidth } = Dimensions.get('window');
 
 interface FixedBannerAdProps {
   shouldShowBanner: boolean;
-  /** Returns primary ID; fallback supported via getBannerAdIds. */
   getBannerAdId: () => string;
-  /** [primary, fallback]: try primary first, on failure try fallback. If not provided, uses getBannerAdId only. */
+  /** Optional: [singleId, null]. Kept for API compat; only first ID is used. */
   getBannerAdIds?: () => [string, string | null];
   requestOptions?: { location?: { latitude: number; longitude: number; accuracy?: number } };
   backgroundColor?: string;
@@ -26,26 +25,13 @@ interface FixedBannerAdProps {
 
 function FixedBannerAd({ shouldShowBanner, getBannerAdId, getBannerAdIds, requestOptions, backgroundColor = '#111721' }: FixedBannerAdProps) {
   const [loadFailed, setLoadFailed] = useState(false);
-  const [useFallback, setUseFallback] = useState(false);
-  // Tab bar is 65px high + 15px margin from bottom = 80px
+  const unitId = getBannerAdIds ? getBannerAdIds()[0] : getBannerAdId();
   const BANNER_HEIGHT = 50;
   const TAB_BAR_TOTAL_HEIGHT = 80;
 
-  const ids = getBannerAdIds ? getBannerAdIds() : [getBannerAdId(), null];
-  const unitId = useFallback && ids[1] ? ids[1] : ids[0];
-
-  // When both primary and fallback failed: hide the banner
   if (shouldShowBanner && loadFailed) {
     return null;
   }
-
-  const handleLoadFailure = () => {
-    if (ids[1] && !useFallback) {
-      setUseFallback(true);
-    } else {
-      setLoadFailed(true);
-    }
-  };
 
   return (
     <View
@@ -65,10 +51,12 @@ function FixedBannerAd({ shouldShowBanner, getBannerAdId, getBannerAdIds, reques
             unitId={unitId}
             size={BannerAdSize.BANNER}
             requestOptions={requestOptions}
-            onAdLoaded={() => { setLoadFailed(false); setUseFallback(false); }}
-            onAdFailedToLoad={() => {
-              console.log('📺 Banner: load failed, trying fallback if available');
-              handleLoadFailure();
+            onAdLoaded={() => setLoadFailed(false)}
+            onAdFailedToLoad={(error: any) => {
+              const code = error?.code ?? error?.nativeEvent?.code;
+              const msg = error?.message ?? error?.nativeEvent?.message ?? '';
+              console.log('📺 Banner: load failed', code ? `(code: ${code}${msg ? `, ${msg}` : ''})` : '');
+              setLoadFailed(true);
             }}
           />
         </View>

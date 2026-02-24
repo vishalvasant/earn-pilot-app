@@ -16,6 +16,7 @@ let BannerAd: any = null;
 let BannerAdSize: any = null;
 let InterstitialAd: any = null;
 let RewardedAd: any = null;
+let AppOpenAd: any = null;
 let AdEventType: any = null;
 let RewardedAdEventType: any = null;
 
@@ -38,6 +39,7 @@ try {
   BannerAdSize = admobModule.BannerAdSize;
   InterstitialAd = admobModule.InterstitialAd;
   RewardedAd = admobModule.RewardedAd;
+  AppOpenAd = admobModule.AppOpenAd;
   AdEventType = admobModule.AdEventType;
   RewardedAdEventType = admobModule.RewardedAdEventType;
   admobModuleAvailable = true;
@@ -58,25 +60,17 @@ export interface AdMobConfig {
   interstitial_ad_frequency: number;
   rewarded_ad_points_bonus: number;
   max_rewarded_ads_per_day: number;
-  // AdMob IDs
-  admob_banner_ad_id?: string;
-  admob_interstitial_ad_id?: string;
-  admob_rewarded_ad_id?: string;
-  // Ad Manager ad unit paths (fallback when AdMob fails)
-  ad_manager_banner_ad_tag?: string;
-  ad_manager_interstitial_ad_tag?: string;
-  ad_manager_rewarded_ad_tag?: string;
-  // Priority: 'admob' | 'ad_manager' - which to try first per ad type
-  banner_priority?: string;
-  interstitial_priority?: string;
-  rewarded_priority?: string;
-  // Legacy (backward compat)
+  /** Single source for all ads: 'admob' | 'ad_manager'. No fallback. */
+  ad_source?: string;
+  /** Single effective ID per type (from API based on ad_source). */
   banner_ad_id?: string;
-  banner_ad_tag?: string;
   interstitial_ad_id?: string;
   rewarded_ad_id?: string;
-  native_ad_id?: string;
   app_open_ad_id?: string;
+  home_banner_ad_id?: string;
+  home_banner_size?: 'banner' | 'large_banner' | 'medium_rectangle';
+  show_home_banner_ads?: boolean;
+  native_ad_id?: string;
 }
 
 class AdMobService {
@@ -84,9 +78,16 @@ class AdMobService {
   private initialized = false;
   private interstitialAd: any | null = null;
   private interstitialLoaded = false;
-  private interstitialTriedFallback = false;
   private rewardedAd: any | null = null;
-  private rewardedTriedFallback = false;
+  private appOpenAd: any | null = null;
+  private appOpenLoaded = false;
+  /** Set when app becomes active so we show app open once ad loads (e.g. cold start). Cleared when we show or leave active. */
+  private pendingShowAppOpenOnLoad = false;
+  /** Back-off: retry app open load after this delay (ms) on error to avoid "too many failed requests". */
+  private static readonly APP_OPEN_RETRY_DELAY_MS = 10000;
+  private appOpenRetryTimeout: ReturnType<typeof setTimeout> | null = null;
+  /** Previous AppState for refetch on active. */
+  private lastAppState: AppStateStatus = 'active';
   private interstitialAdShownCount = 0;
   private rewardedAdsWatchedToday = 0;
   private lastRewardedAdDate: string | null = null;
@@ -120,6 +121,14 @@ class AdMobService {
       await this.fetchConfig();
       this.setupAppStateRefetch();
 
+      // Load app open ad first so it is ready when main app shows; home/data can load in background
+      if (this.config?.show_app_open_ads) {
+        try {
+          this.loadAppOpenAd();
+        } catch (e: any) {
+          // console.warn('⚠️ Failed to load app open ad:', e?.message || e);
+        }
+      }
       if (this.config?.show_interstitial_ads) {
         try {
           this.loadInterstitialAd();
@@ -147,14 +156,33 @@ class AdMobService {
 
   setupAppStateRefetch(): void {
     this.appStateSubscription?.remove();
+    this.lastAppState = AppState.currentState;
     this.appStateSubscription = AppState.addEventListener('change', (state: AppStateStatus) => {
+      this.lastAppState = state;
       if (state === 'active') {
         this.fetchConfig().then(() => {
           if (this.config?.show_interstitial_ads) this.loadInterstitialAd();
           if (this.config?.show_rewarded_ads) this.loadRewardedAd();
+          if (this.config?.show_app_open_ads) this.loadAppOpenAd();
         });
       }
     });
+  }
+
+  /**
+   * Call when main app is shown: after splash (user already signed in) or after sign-in.
+   * App open ad shows only in these two cases, not when returning from background/quiz/game.
+   * On cold start, init may still be running; we set pending so we show when the ad loads.
+   */
+  requestAppOpenAd(): void {
+    if (this.isAdMobUnavailable) return;
+    if (!this.initialized) {
+      this.pendingShowAppOpenOnLoad = true;
+      return;
+    }
+    if (!this.config?.show_app_open_ads) return;
+    this.pendingShowAppOpenOnLoad = true;
+    this.tryShowAppOpenAd();
   }
 
   async fetchConfig(): Promise<void> {
@@ -202,35 +230,46 @@ class AdMobService {
     return !id || id.startsWith('ca-app-pub-3940256099942544');
   }
 
-  // Banner Ad: returns [primaryId, fallbackId | null] based on priority. App tries primary first, falls back on failure.
+  /** Single effective banner ID (no fallback). */
   getBannerAdIds(): [string, string | null] {
-    if (this.isAdMobUnavailable) {
-      return [GOOGLE_TEST_IDS.BANNER, null];
-    }
-    const testMode = this.config?.test_mode === true;
-    const admobId = this.config?.admob_banner_ad_id ?? this.config?.banner_ad_id;
-    const adManagerTag = this.config?.ad_manager_banner_ad_tag ?? this.config?.banner_ad_tag;
-    const priority = this.config?.banner_priority ?? 'admob';
-
-    const admob = (testMode || !admobId || this.isTestAdId(admobId)) ? GOOGLE_TEST_IDS.BANNER : admobId;
-    const adManager = adManagerTag?.trim() || null;
-
-    if (priority === 'ad_manager' && adManager) {
-      return [adManager, admob];
-    }
-    return [admob, adManager];
+    const id = this.getBannerAdId();
+    return [id, null];
   }
 
-  /** Single ID for backward compat; returns primary. */
   getBannerAdId(): string {
-    const [primary] = this.getBannerAdIds();
-    return primary;
+    if (this.isAdMobUnavailable) return GOOGLE_TEST_IDS.BANNER;
+    const testMode = this.config?.test_mode === true;
+    const id = this.config?.banner_ad_id ?? '';
+    return (testMode || !id || this.isTestAdId(id)) ? GOOGLE_TEST_IDS.BANNER : id;
   }
 
   shouldShowBannerAd(): boolean {
     const show = !this.isAdMobUnavailable && this.isEnabled() && (this.config?.show_banner_ads || false);
-    // console.log(`🎯 shouldShowBannerAd: ${show} ...`);
     return show;
+  }
+
+  /** Home screen banner: single effective ID (no fallback). */
+  getHomeBannerAdIds(): [string, string | null] {
+    const id = this.getHomeBannerAdId();
+    return [id, null];
+  }
+
+  getHomeBannerAdId(): string {
+    if (this.isAdMobUnavailable) return GOOGLE_TEST_IDS.BANNER;
+    const testMode = this.config?.test_mode === true;
+    const id = (this.config?.home_banner_ad_id ?? '').trim() || (this.config?.banner_ad_id ?? '');
+    return (testMode || !id || this.isTestAdId(id)) ? GOOGLE_TEST_IDS.BANNER : id;
+  }
+
+  getHomeBannerSize(): 'BANNER' | 'LARGE_BANNER' | 'MEDIUM_RECTANGLE' {
+    const size = this.config?.home_banner_size ?? 'banner';
+    if (size === 'large_banner') return 'LARGE_BANNER';
+    if (size === 'medium_rectangle') return 'MEDIUM_RECTANGLE';
+    return 'BANNER';
+  }
+
+  shouldShowHomeBannerAd(): boolean {
+    return !this.isAdMobUnavailable && this.isEnabled() && (this.config?.show_home_banner_ads !== false);
   }
 
   /** Request options for ad requests (e.g. location from APP_CONFIG.AD_REQUEST_LOCATION). */
@@ -240,35 +279,94 @@ class AdMobService {
       : {};
   }
 
-  private getInterstitialAdIds(): [string, string | null] {
-    if (this.isAdMobUnavailable) return [GOOGLE_TEST_IDS.INTERSTITIAL, null];
+  private getInterstitialAdId(): string {
+    if (this.isAdMobUnavailable) return GOOGLE_TEST_IDS.INTERSTITIAL;
     const testMode = this.config?.test_mode === true;
-    const admobId = this.config?.admob_interstitial_ad_id ?? this.config?.interstitial_ad_id;
-    const adManagerTag = this.config?.ad_manager_interstitial_ad_tag;
-    const priority = this.config?.interstitial_priority ?? 'admob';
-
-    const admob = (testMode || !admobId || this.isTestAdId(admobId)) ? GOOGLE_TEST_IDS.INTERSTITIAL : admobId;
-    const adManager = adManagerTag?.trim() || null;
-    return priority === 'ad_manager' && adManager ? [adManager, admob] : [admob, adManager];
+    const id = this.config?.interstitial_ad_id ?? '';
+    return (testMode || !id || this.isTestAdId(id)) ? GOOGLE_TEST_IDS.INTERSTITIAL : id;
   }
 
-  private getRewardedAdIds(): [string, string | null] {
-    if (this.isAdMobUnavailable) return [GOOGLE_TEST_IDS.REWARDED, null];
+  private getRewardedAdId(): string {
+    if (this.isAdMobUnavailable) return GOOGLE_TEST_IDS.REWARDED;
     const testMode = this.config?.test_mode === true;
-    const admobId = this.config?.admob_rewarded_ad_id ?? this.config?.rewarded_ad_id;
-    const adManagerTag = this.config?.ad_manager_rewarded_ad_tag;
-    const priority = this.config?.rewarded_priority ?? 'admob';
+    const id = this.config?.rewarded_ad_id ?? '';
+    return (testMode || !id || this.isTestAdId(id)) ? GOOGLE_TEST_IDS.REWARDED : id;
+  }
 
-    const admob = (testMode || !admobId || this.isTestAdId(admobId)) ? GOOGLE_TEST_IDS.REWARDED : admobId;
-    const adManager = adManagerTag?.trim() || null;
-    return priority === 'ad_manager' && adManager ? [adManager, admob] : [admob, adManager];
+  private getAppOpenAdId(): string {
+    if (this.isAdMobUnavailable) return GOOGLE_TEST_IDS.APP_OPEN;
+    const testMode = this.config?.test_mode === true;
+    const id = (this.config?.app_open_ad_id ?? '').trim();
+    // When no app open ID in production (e.g. Ad Manager without app open tag), don't use test ID – skip loading instead.
+    if (!id && !testMode) return '';
+    return (testMode || this.isTestAdId(id)) ? GOOGLE_TEST_IDS.APP_OPEN : id;
+  }
+
+  shouldShowAppOpenAd(): boolean {
+    return !this.isAdMobUnavailable && this.isEnabled() && (this.config?.show_app_open_ads === true);
+  }
+
+  loadAppOpenAd(): void {
+    if (this.isAdMobUnavailable || !AppOpenAd || !this.config?.show_app_open_ads) return;
+    const adId = this.getAppOpenAdId();
+    // No ID in production (e.g. Ad Manager with no app open tag): skip to avoid test-ID fallback and request storms.
+    if (!adId) return;
+
+    if (this.appOpenRetryTimeout != null) {
+      clearTimeout(this.appOpenRetryTimeout);
+      this.appOpenRetryTimeout = null;
+    }
+
+    this.appOpenAd = AppOpenAd.createForAdRequest(adId, this.getAdRequestOptions());
+    this.appOpenLoaded = false;
+
+    this.appOpenAd.addAdEventListener(AdEventType.LOADED, () => {
+      this.appOpenLoaded = true;
+      if (this.pendingShowAppOpenOnLoad && AppState.currentState === 'active') {
+        this.tryShowAppOpenAd();
+      }
+    });
+
+    this.appOpenAd.addAdEventListener(AdEventType.CLOSED, () => {
+      this.appOpenLoaded = false;
+      this.loadAppOpenAd();
+    });
+
+    this.appOpenAd.addAdEventListener(AdEventType.ERROR, (error: any) => {
+      console.warn('📺 App open ad error:', error?.message || error);
+      this.appOpenLoaded = false;
+      this.appOpenAd = null;
+      // Retry after delay to avoid "too many recently failed requests" and log spam.
+      if (this.appOpenRetryTimeout != null) clearTimeout(this.appOpenRetryTimeout);
+      this.appOpenRetryTimeout = setTimeout(() => {
+        this.appOpenRetryTimeout = null;
+        this.loadAppOpenAd();
+      }, AdMobService.APP_OPEN_RETRY_DELAY_MS);
+    });
+
+    this.appOpenAd.load();
+  }
+
+  /** Call when app becomes active (or when ad loads and we're active). Shows app open ad once per app open. */
+  async tryShowAppOpenAd(): Promise<boolean> {
+    if (this.isAdMobUnavailable || !this.config?.show_app_open_ads || !this.appOpenAd || !this.appOpenLoaded) {
+      return false;
+    }
+    try {
+      this.pendingShowAppOpenOnLoad = false;
+      await this.appOpenAd.show();
+      this.appOpenLoaded = false; // will reload on CLOSED
+      return true;
+    } catch (e) {
+      this.appOpenLoaded = false;
+      this.loadAppOpenAd();
+      return false;
+    }
   }
 
   loadInterstitialAd(): void {
     if (this.isAdMobUnavailable || !this.config?.show_interstitial_ads) return;
-    const [primary, fallback] = this.getInterstitialAdIds();
-    const adId = this.interstitialTriedFallback ? (fallback ?? primary) : primary;
-    this.interstitialTriedFallback = false;
+    const adId = this.getInterstitialAdId();
 
     this.interstitialAd = InterstitialAd.createForAdRequest(adId, this.getAdRequestOptions());
     this.interstitialLoaded = false;
@@ -280,20 +378,13 @@ class AdMobService {
 
     this.interstitialAd.addAdEventListener(AdEventType.CLOSED, () => {
       this.interstitialLoaded = false;
-      this.interstitialTriedFallback = false;
       this.loadInterstitialAd();
     });
 
     this.interstitialAd.addAdEventListener(AdEventType.ERROR, (error: any) => {
       console.warn('📺 Interstitial error:', error?.message || error);
       this.interstitialLoaded = false;
-      if (fallback && !this.interstitialTriedFallback) {
-        this.interstitialTriedFallback = true;
-        this.loadInterstitialAd();
-      } else {
-        this.interstitialTriedFallback = false;
-        this.loadInterstitialAd();
-      }
+      this.loadInterstitialAd();
     });
 
     this.interstitialAd.load();
@@ -335,9 +426,7 @@ class AdMobService {
 
   loadRewardedAd(): void {
     if (this.isAdMobUnavailable || !this.config?.show_rewarded_ads) return;
-    const [primary, fallback] = this.getRewardedAdIds();
-    const adId = this.rewardedTriedFallback ? (fallback ?? primary) : primary;
-    this.rewardedTriedFallback = false;
+    const adId = this.getRewardedAdId();
 
     this.rewardedAd = RewardedAd.createForAdRequest(adId, this.getAdRequestOptions());
 
@@ -348,19 +437,12 @@ class AdMobService {
     this.rewardedAd.addAdEventListener(RewardedAdEventType.EARNED_REWARD, () => {});
 
     this.rewardedAd.addAdEventListener(AdEventType.CLOSED, () => {
-      this.rewardedTriedFallback = false;
       this.loadRewardedAd();
     });
 
     this.rewardedAd.addAdEventListener(AdEventType.ERROR, (error: any) => {
       console.warn('📺 Rewarded error:', error?.message || error);
-      if (fallback && !this.rewardedTriedFallback) {
-        this.rewardedTriedFallback = true;
-        this.loadRewardedAd();
-      } else {
-        this.rewardedTriedFallback = false;
-        this.loadRewardedAd();
-      }
+      this.loadRewardedAd();
     });
 
     this.rewardedAd.load();

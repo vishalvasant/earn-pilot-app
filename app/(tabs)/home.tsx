@@ -39,6 +39,9 @@ import { UnityLauncherService } from '../../services/unityLauncher';
 import { APP_CONFIG } from '../../config/app';
 import { Linking } from 'react-native';
 
+/** Cut the Rope: use config URL (local or production) so one place controls it */
+const CUT_THE_ROPE_URL = APP_CONFIG.HTML5_GAME_CUT_THE_ROPE_URL;
+
 const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
 
 // Get dynamic greeting based on time of day
@@ -57,7 +60,7 @@ const getGreeting = () => {
 export default function HomeScreen() {
   const navigation = useNavigation();
   const theme = useTheme();
-  const { shouldShowBanner, getBannerAdId, getBannerAdIds, getAdRequestOptions, showInterstitial } = useAdMob();
+  const { shouldShowBanner, getBannerAdId, getBannerAdIds, getAdRequestOptions, showInterstitial, shouldShowHomeBanner, getHomeBannerAdIds, getHomeBannerSize } = useAdMob();
   const token = useAuthStore(state => state.token);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -65,6 +68,7 @@ export default function HomeScreen() {
   const [activeGame, setActiveGame] = useState<'color-match' | 'image-similarity' | 'math-quiz' | 'memory-pattern' | null>(null);
   const [showCooldownPopup, setShowCooldownPopup] = useState(false);
   const [inlineBannerFailed, setInlineBannerFailed] = useState(false);
+  const [homeBannerFailed, setHomeBannerFailed] = useState(false);
   const [cooldownMessage, setCooldownMessage] = useState('');
   const [popupTitle, setPopupTitle] = useState('Game Complete');
   const isInitializingCooldowns = useRef(false);
@@ -90,7 +94,9 @@ export default function HomeScreen() {
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [greeting, setGreeting] = useState(getGreeting());
   const [heroSlides, setHeroSlides] = useState<HeroSlide[]>([]);
+  const [heroSlidesLoading, setHeroSlidesLoading] = useState(true);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+  const [heroImageLoaded, setHeroImageLoaded] = useState<Record<number, boolean>>({});
   const slideScrollRef = useRef<ScrollView>(null);
   const isFirstFocusRef = useRef(true);
 
@@ -154,86 +160,70 @@ export default function HomeScreen() {
     }, [setProfile])
   );
 
-  // Single initialization effect
+  // Single initialization effect – progressive load: show UI as soon as critical data is ready
   useEffect(() => {
+    const CRITICAL_MS = 4000; // Max wait for critical path; then show UI anyway
+
     const initialize = async () => {
       try {
-        // Register FCM token if user has enabled notifications in device Settings → Apps → Earn Pilot → Notifications
-        getFCMToken().then(async (fcmToken) => {
-          if (fcmToken) {
-            const authToken = useAuthStore.getState().token;
-            if (authToken) {
-              await registerDeviceToken(authToken, fcmToken);
-            }
-          }
-        }).catch(err => console.warn('FCM token error (enable notifications in app Settings):', err));
-        
-        setupMessageHandlers();
-        
-        // Fetch all data in parallel: dashboard, games, tasks, quizzes, profile
-        // console.log('🚀 Starting parallel data fetch...');
-        
-        await Promise.all([
-          // Dashboard (includes wallet balance, activity, and tasks internally)
-          getDashboardDetails().then(data => {
-            setDashboard(data?.data ?? data ?? null);
-          }).catch(err => {
+        // Defer FCM so it does not block first paint
+        setTimeout(() => {
+          getFCMToken()
+            .then(async (fcmToken) => {
+              if (fcmToken) {
+                const authToken = useAuthStore.getState().token;
+                if (authToken) await registerDeviceToken(authToken, fcmToken);
+              }
+            })
+            .catch((err) => console.warn('FCM token error (enable notifications in app Settings):', err));
+          setupMessageHandlers();
+        }, 500);
+
+        // Start all fetches in parallel (no await yet)
+        const dashboardPromise = getDashboardDetails()
+          .then((data) => setDashboard(data?.data ?? data ?? null))
+          .catch((err) => {
             console.warn('Dashboard fetch error:', err);
             setDashboard(null);
-          }),
-          
-          // Games configs
-          loadGameConfigs().catch(err => {
-            console.warn('Games configs fetch error:', err);
-          }),
-          
-          // Stats (local storage, fast)
-          loadStats().catch(err => {
-            console.warn('Stats load error:', err);
-          }),
-          
-          // All initial data (tasks, quizzes, profile) - uses centralized store
-          fetchAllInitialData().catch(err => {
-            console.warn('Initial data fetch error:', err);
-          }),
-          
-          // Hero slides
-          getHeroSlides().then(slides => {
+          });
+
+        const gameConfigsPromise = loadGameConfigs().catch((err) =>
+          console.warn('Games configs fetch error:', err)
+        );
+
+        loadStats().catch((err) => console.warn('Stats load error:', err));
+
+        fetchAllInitialData()
+          .then(() => {
+            const dataStoreProfile = useDataStore.getState().profile;
+            if (dataStoreProfile?.id) setProfile(dataStoreProfile);
+          })
+          .catch((err) => console.warn('Initial data fetch error:', err));
+
+        getHeroSlides()
+          .then((slides) => {
             setHeroSlides(slides);
-          }).catch(err => {
+            setHeroSlidesLoading(false);
+            setHeroImageLoaded({});
+          })
+          .catch((err) => {
             console.warn('Hero slides fetch error:', err);
             setHeroSlides([]);
-          }),
+            setHeroSlidesLoading(false);
+            setHeroImageLoaded({});
+          });
 
-          // Add-On games (Unity) – COMMENTED: not using add-on games as of now
-          // api.get('/unity-open/games')
-          //   .then(response => {
-          //     const games: AddOnGame[] = response.data?.games || [];
-          //     setAddOnGames(games);
-          //   })
-          //   .catch(err => {
-          //     console.warn('Add-on games fetch error:', err);
-          //     setAddOnGames([]);
-          //   }),
-        ]);
-        
-        // Update user store profile if dataStore has it
-        const dataStoreProfile = useDataStore.getState().profile;
-        if (dataStoreProfile?.id && !profile?.id) {
-          setProfile(dataStoreProfile);
-        } else if (!profile?.id && dataStoreProfile?.id) {
-          // If profile is not set, use the one from dataStore
-          setProfile(dataStoreProfile);
-        }
-        
-        // console.log('✅ All data loaded successfully');
+        // Show home UI as soon as critical data (dashboard + game configs) is ready, or after timeout
+        const criticalPromise = Promise.all([dashboardPromise, gameConfigsPromise]);
+        const timeoutPromise = new Promise<void>((resolve) => setTimeout(resolve, CRITICAL_MS));
+        await Promise.race([criticalPromise, timeoutPromise]);
       } catch (e) {
-        // console.warn('Failed to load initial data', e);
+        // ignore
       } finally {
         setLoadingDashboard(false);
       }
     };
-    
+
     initialize();
     
     const greetingInterval = setInterval(() => {
@@ -566,6 +556,10 @@ export default function HomeScreen() {
               <View style={[styles.heroSliderContainer, { height: 200, marginHorizontal: 20, marginTop: 20, marginBottom: 20 }]}>
                 <Skeleton width="100%" height={200} borderRadius={20} />
               </View>
+              {/* Home banner slot skeleton – same layout as inlineBannerAd */}
+              <View style={[styles.inlineBannerAd, { marginTop: 0 }]}>
+                <Skeleton width="100%" height={50} borderRadius={8} />
+              </View>
               <Skeleton width={140} height={12} style={{ marginHorizontal: 20, marginTop: 24, marginBottom: 12 }} borderRadius={4} />
               <View style={[styles.offerwallCard, { padding: 20, marginHorizontal: 20 }]}>
                 <Skeleton width={60} height={60} style={{ alignSelf: 'center', marginBottom: 12 }} borderRadius={12} />
@@ -609,8 +603,12 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          {/* Hero Slider */}
-          {heroSlides.length > 0 ? (
+          {/* Hero Slider – skeleton while loading or when no slides */}
+          {heroSlidesLoading || heroSlides.length === 0 ? (
+            <View style={[styles.heroSliderContainer, { marginHorizontal: 20, marginTop: 20, marginBottom: 20 }]}>
+              <Skeleton width="100%" height={200} borderRadius={20} />
+            </View>
+          ) : (
             <View style={styles.heroSliderContainer}>
               <ScrollView
                 ref={slideScrollRef}
@@ -634,12 +632,19 @@ export default function HomeScreen() {
                     }}
                     style={styles.slideContainer}
                   >
+                    {!heroImageLoaded[index] && (
+                      <View style={[StyleSheet.absoluteFill, { borderRadius: 20, overflow: 'hidden' }]}>
+                        <Skeleton width="100%" height="100%" borderRadius={20} />
+                      </View>
+                    )}
                     <Image
                       source={{ uri: slide.image_url }}
-                      style={styles.slideImage}
+                      style={[styles.slideImage, { opacity: heroImageLoaded[index] ? 1 : 0 }]}
                       resizeMode="cover"
+                      onLoad={() => setHeroImageLoaded((prev) => ({ ...prev, [index]: true }))}
                       onError={(error) => {
                         console.error('Hero slide image load error:', error.nativeEvent.error, 'URL:', slide.image_url);
+                        setHeroImageLoaded((prev) => ({ ...prev, [index]: true }));
                       }}
                     />
                     {(slide.title || slide.subtitle) && (
@@ -658,8 +663,6 @@ export default function HomeScreen() {
                   </TouchableOpacity>
                 ))}
               </ScrollView>
-              
-              {/* Pagination Dots */}
               {heroSlides.length > 1 && (
                 <View style={styles.paginationContainer}>
                   {heroSlides.map((_, index) => (
@@ -674,30 +677,31 @@ export default function HomeScreen() {
                 </View>
               )}
             </View>
-          ) : (
-            // Fallback to old banner if no slides
-            <LinearGradient
-              colors={[theme.primary, theme.primary + 'CC']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.banner}
-            >
-              <Text style={styles.bannerTitle}>Smart Yield</Text>
-              <Text style={styles.bannerSubtitle}>Your 1.5x Multiplier is currently Active</Text>
-            </LinearGradient>
           )}
 
-        {/* Banner Ad above Add-On Games – hidden when no-fill or load failure */}
-        {shouldShowBanner && !inlineBannerFailed && (() => {
+        {/* Home banner (below hero): separately maintained in admin; size can be banner / large_banner / medium_rectangle */}
+        {shouldShowHomeBanner() && !homeBannerFailed && (() => {
           try {
             const { BannerAd, BannerAdSize } = require('react-native-google-mobile-ads');
+            const homeIds = getHomeBannerAdIds();
+            const homeUnitId = homeIds[0];
+            const sizeKey = getHomeBannerSize();
+            const sizeProp = BannerAdSize[sizeKey] ?? BannerAdSize.BANNER;
+            const minHeight = sizeKey === 'MEDIUM_RECTANGLE' ? 250 : sizeKey === 'LARGE_BANNER' ? 100 : 50;
             return (
-              <View style={[styles.inlineBannerAd, { backgroundColor: theme.background }]}>
+              <View style={[styles.inlineBannerAd, { backgroundColor: theme.background, minHeight }]}>
                 <BannerAd
-                  unitId={getBannerAdId()}
-                  size={BannerAdSize.BANNER}
+                  key={homeUnitId}
+                  unitId={homeUnitId}
+                  size={sizeProp}
                   requestOptions={getAdRequestOptions()}
-                  onAdFailedToLoad={() => setInlineBannerFailed(true)}
+                  onAdLoaded={() => setHomeBannerFailed(false)}
+                  onAdFailedToLoad={(error: any) => {
+                    const code = error?.code ?? error?.nativeEvent?.code;
+                    const msg = error?.message ?? error?.nativeEvent?.message ?? '';
+                    console.log('📺 Home banner: load failed', code != null ? `(code: ${code}${msg ? `, ${msg}` : ''})` : '');
+                    setHomeBannerFailed(true);
+                  }}
                 />
               </View>
             );
@@ -779,6 +783,32 @@ export default function HomeScreen() {
             </View>
           </LinearGradient>
         </TouchableOpacity>
+
+        {/* Cut the Rope – commented out for now
+        <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>ARCADE</Text>
+        <TouchableOpacity
+          activeOpacity={0.8}
+          onPress={() => (navigation as any).navigate('HTML5Game', { title: 'Cut the Rope', url: CUT_THE_ROPE_URL })}
+        >
+          <LinearGradient
+            colors={[theme.card, theme.background]}
+            start={{ x: 1, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={[styles.offerwallCard, { borderColor: theme.primary }]}
+          >
+            <View style={styles.offerwallContent}>
+              <Text style={styles.offerwallIcon}>🪅</Text>
+              <Text style={[styles.offerwallTitle, { color: theme.primary }]}>Cut the Rope</Text>
+              <Text style={[styles.offerwallSubtitle, { color: theme.textSecondary }]}>
+                Feed the candy to Om Nom – cut the ropes!
+              </Text>
+              <View style={[styles.offerwallButton, { backgroundColor: theme.primary }]}>
+                <Text style={[styles.offerwallButtonText, { color: theme.background }]}>PLAY</Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+        */}
 
         {/* Mini Games */}
         <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>MINI GAMES</Text>
