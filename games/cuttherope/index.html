@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+
+    <title>Cut the Rope</title>
+    <link rel="canonical" href="http://windyboy.freevnn.com" />
+    <meta name="description" content="Play Cut the Rope! A mysterious package has arrived, and the little monster inside has only one request… CANDY!">
+
+    <meta name="msapplication-tooltip" content="Play Cut the Rope! A mysterious package has arrived, and the little monster inside has only one request… CANDY!" />
+    <meta name="msapplication-navbutton-color" content="#659729" />
+    <meta name="msApplication-ID" content="App"/>
+    <meta name="msApplication-PackageFamilyName" content="ZeptoLabUKLimited.CutTheRope_sq9zxnwrk84pj"/>
+    <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
+
+    <meta property="og:title" content="Cut the Rope" />
+    <meta property="og:type" content="game" />
+    <meta property="og:url" content="http://windyboy.freevnn.com/games/ctr" />
+    <meta property="og:image" content="http://windyboy.freevnn.com/games/ctr/fb.png" />
+    <meta property="og:site_name" content="Cut the Rope" />
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-visual">
+	<script type="text/javascript" src="js/detectmobilebrowser.js"></script>
+    <link href="css/ctr.css?438" rel="stylesheet" type="text/css">
+    <script src="scripts/sm2.js?438" type="text/javascript"></script>
+    <script src="scripts/libraries.js?438" type="text/javascript"></script>
+    <script src="scripts/ctr.js?438" type="text/javascript"></script>
+    <noscript>
+        <link href="css/nojavascript.css?438" rel="stylesheet" type="text/css">
+    </noscript>
+</head>
+<body class="ctrCursor">
+  <div id="lang">
+    <div id="fb-root"></div>
+
+    <style type="text/css">
+        .hideBeforeLoad, #loaderWindow, #popupWindow { display: none; }
+        /* Fit game in viewport: one scale factor (no stretch), space on sides or top/bottom as needed */
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; min-height: 100vh; min-height: 100dvh; overflow: hidden; background: #000 !important; -webkit-overflow-scrolling: touch; }
+        #lang { position: fixed !important; inset: 0 !important; width: 100% !important; height: 100% !important; min-height: 100vh !important; min-height: 100dvh !important; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left) !important; box-sizing: border-box !important; background: #000 !important; display: flex !important; align-items: center !important; justify-content: center !important; overflow: hidden !important; }
+        body::before { content: ''; position: fixed; inset: 0; background: #000; z-index: -1; }
+        #gameContainer {
+          transform-origin: 50% 50% !important;
+          position: absolute !important;
+          left: 50% !important;
+          top: 50% !important;
+          right: auto !important;
+          bottom: auto !important;
+          margin: 0 !important;
+          backface-visibility: hidden !important;
+          overflow: hidden !important;
+          transform: translate(-50%, -50%) scale(var(--fit-scale, 1)) !important;
+          -webkit-transform: translate(-50%, -50%) scale(var(--fit-scale, 1)) !important;
+        }
+        body.ui-1024 #gameContainer, body.ui-768 #gameContainer { position: absolute !important; left: 50% !important; top: 50% !important; right: auto !important; bottom: auto !important; margin: 0 !important; }
+        #rotatePrompt { position: fixed !important; inset: 0 !important; z-index: 9999 !important; background: #1a1a1a !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; padding: 24px !important; box-sizing: border-box !important; }
+        #rotatePrompt.hide { display: none !important; }
+        #rotatePromptIcon { font-size: 48px; margin-bottom: 16px; opacity: 0.9; }
+        #rotatePromptText { color: #fff; font-family: sans-serif; font-size: 18px; text-align: center; line-height: 1.4; max-width: 260px; }
+    </style>
+
+    <div id="rotatePrompt" aria-hidden="true">
+        <div id="rotatePromptIcon">↻</div>
+        <div id="rotatePromptText">Rotate your device to landscape to play</div>
+    </div>
+
+    <div id="gameContainer" >
+        <div id="game-border">
+            <div id="loader-logo"></div>
+        </div>
+        <div id="gameArea" class="hideBeforeLoad">
+            <canvas id="c"></canvas>
+            <div id="loadingPanel" class="panel"></div>
+
+            <div id="startBackground" class="panel"></div>
+            <div id="menuBackground" class="panel"></div>
+            <div id="levelBackground" class="panel">
+                <canvas id="levelCanvas"></canvas>
+                <div id="levelTape" class="levelTape"></div>
+            </div>
+            <div id="shadowPanel" class="panel">
+                <canvas id="shadowCanvas"></canvas>
+            </div>
+            <div id="menuPanel" class="panel seethrough">
+                <div class="panelContent">
+                    <div id="menuLogo" ></div>
+                    <div id="menuBtnVbox" class="fBtnVBox">
+                        <div id="playBtn" class="fBtn"><img src="" /></div>
+                        <div id="optionsBtn" class="fBtn"><img src="" /></div>
+                    </div>
+                </div>
+                <div id="miniOptionsMenu">
+					<!--<div id="optionHd"></div>
+					<div id="optionSd"></div>-->
+                    <div id="optionSound" class="ctrPointer" ></div>
+                    <div id="optionMsg"></div>
+                </div>
+            </div>
+
+            <div id="boxPanel" class="panel seethrough">
+                
+                <canvas id="boxCanvas"></canvas>
+
+                <div id="boxScore" class="hideFromMouse"><img src="" /></div>
+
+                <div id="boxNavBack">
+                    <div class="boxNavDisabled">
+                    </div>
+                </div>
+                <div id="boxNavForward">
+                    <div>
+                    </div>
+                </div>
+                <div id="boxBack" class="bBtn">
+                </div>
+            </div>
+            <div id="levelPanel" class="panel">
+                <div id="levelScore">
+                    <img src="" /></div>
+                <div id="levelBack" class="bBtn">
+                </div>
+                <div id="levelOptions"></div>
+                <div id="levelResults">
+                    <div id="resultStatus"><img src="" /></div>
+                    <div class="starCase">
+                        <div id="resultStar1" class=""></div>
+                        <div id="resultStar2" class=""></div>
+                        <div id="resultStar3" class=""></div>
+                    </div>
+                    <div id="resultTicker">
+                        <img id="resultTickerLabel" />
+                        <img id="resultTickerValue" />
+                        <img id="resultTickerMessage" />
+                    </div>
+                    <div class="line"></div>
+                    <div id="resultScore"></div>
+                    <div class="btnCase">
+                        <div id="replayBtn" class="sBtn"><img src="" /></div>
+                        <div id="lrMenuBtn" class="sBtn"><img src="" /></div>
+                        <div id="nextBtn" class="sBtn"><img src="" /></div>
+                    </div>
+                    <div id="resultImproved"></div>
+                </div>
+            </div>
+
+            <div id="gameCompletePanel" class="panel">
+                <div id="congrats"></div>
+                <div id="finalScore"><img src="" /></div>
+                <a href="http://windyboy.freevnn.com/games" id="finalFunBtn" class="lBtn" target="_blank"><img src="" /><div id="funOmNom"></div></a>
+                <div id="gameCompleteBack" class="bBtn"></div>
+            </div>
+            
+            <div id="optionsPanel" class="panel">
+                <div class="fBtnVBox">
+                    <div id="optionsTitle"><img src="" /></div>
+                    <div id="soundBtn" class="mini-button ctrCursor"><div id="options-speaker"></div><div class="options-x"></div></div>
+                    <div id="musicBtn" class="mini-button ctrCursor"><div id="options-note"></div><div class="options-x"></div></div>
+                    <div id="langBtn" class="fBtn"><img src="" /><div id="flag"></div></div>
+                    <div id="resetBtn" class="fBtn"><img src="" /></div>
+                    <div id="creditsBtn" class="fBtn"><img src="" /></div>
+                    <div id="dragBtn"><img id="dragText" /><div class="options-check-disabled"></div></div>
+                    <div id="cutBtn" class="ctrCursor"><img id="cutText" /><div class="options-check"></div></div>
+                </div>
+                <div id="optionsBack" class="bBtn"></div>
+            </div>
+
+            <div id="d" class="panel ctrPointer">
+                <img id="dmsg" />
+                <div id="dframe">
+                    <div id="dpic"></div>
+                </div>
+                <div id="dshareBtn" class="fBtn"><img src="" /><div id="dfb"></div></div>
+            </div>
+            <div id="gameBtnTray">
+                <div id="gameMsg" class="allSound"></div>
+                <div id="gameSound" class="ctrPointer allSound"></div>
+                <div id="gameRestartBtn" class="ctrPointer"></div>
+                <div id="gameMenuBtn" class="ctrPointer"></div>
+            </div>
+            <div id="levelMenu">
+                <div class="fBtnVBox">
+                    <div id="continueBtn" class="fBtn"><img src="" /></div>
+                    <div id="skipBtn" class="fBtn"><img src="" /></div>
+                    <div id="selectBtn" class="fBtn"><img src="" /></div>
+                    <div id="menuBtn" class="fBtn"><img src="" /></div>
+                </div>
+            </div>
+
+            <div id="boxCutter">
+            </div>
+            <div id="tapeRoll">
+            </div>
+            <div id="video"></div>
+            <div id="fadeToBlack" class="panel"></div>
+        </div>  
+        <canvas id="e"></canvas>
+        
+        <div id="loaderWindow">
+            <div id="loaderBubbles">
+                <img id="loaderLogo" src="images/page/loader-logo.png" />
+                <div id="loaderCanvasHost">
+                    <canvas id="loaderCanvas"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div id="popupWindow">
+            <div class="popupOuterFrame">
+                <div class="popupInnerFrame" id="slowComputer">
+                    <div class="fBtn" id="slowComputerBtn"><img src="" /></div>
+                </div>
+                <div class="popupInnerFrame" id="resetGame">
+                    <div id="resetText"></div>
+                    <div class="mBtn" id="resetYesBtn"><img src="" /></div>
+                    <div class="mBtn" id="resetNoBtn"><img src="" /></div>
+                    <div id="resetHoldYes"></div>
+                </div>
+                <div class="popupInnerFrame" id="missingStars">
+                    <div id="missingLine1"></div>
+                    <div id="missingCount"><div id="missingStar"></div></div>
+                    <div id="missingLine2"></div>
+                    <div id="missingLine3"></div>
+                    <div class="mBtn" id="missingOkBtn"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="upgrade">
+            <div id="upgrade-header"></div>
+            <a id="upgrade-button" href="http://windows.microsoft.com/ie"></a>
+        </div>
+
+    </div>
+
+  </div>
+
+  <script>
+  (function() {
+    function getGameSize() {
+      var b = document.body;
+      if (b.classList.contains('ui-768')) return { w: 768, h: 548 };
+      return { w: 1024, h: 730 };
+    }
+    var MIN_VIEWPORT = 80;
+    function getScreenWidthHeight() {
+      if (typeof window.__WEBVIEW_WIDTH__ === 'number' && typeof window.__WEBVIEW_HEIGHT__ === 'number' && window.__WEBVIEW_WIDTH__ >= MIN_VIEWPORT && window.__WEBVIEW_HEIGHT__ >= MIN_VIEWPORT) {
+        return { w: window.__WEBVIEW_WIDTH__, h: window.__WEBVIEW_HEIGHT__ };
+      }
+      var candidates = [];
+      if (window.visualViewport && typeof window.visualViewport.width === 'number' && typeof window.visualViewport.height === 'number') {
+        var vw = Math.round(window.visualViewport.width), vh = Math.round(window.visualViewport.height);
+        if (vw >= MIN_VIEWPORT && vh >= MIN_VIEWPORT) candidates.push({ w: vw, h: vh });
+      }
+      if (window.innerWidth >= MIN_VIEWPORT && window.innerHeight >= MIN_VIEWPORT) {
+        candidates.push({ w: window.innerWidth, h: window.innerHeight });
+      }
+      if (document.documentElement) {
+        var cw = document.documentElement.clientWidth, ch = document.documentElement.clientHeight;
+        if (cw >= MIN_VIEWPORT && ch >= MIN_VIEWPORT) candidates.push({ w: cw, h: ch });
+      }
+      var lang = document.getElementById('lang');
+      if (lang) {
+        var r = lang.getBoundingClientRect();
+        if (r.width >= MIN_VIEWPORT && r.height >= MIN_VIEWPORT) {
+          candidates.push({ w: Math.round(r.width), h: Math.round(r.height) });
+        }
+        if (lang.clientWidth >= MIN_VIEWPORT && lang.clientHeight >= MIN_VIEWPORT) {
+          candidates.push({ w: lang.clientWidth, h: lang.clientHeight });
+        }
+      }
+      if (candidates.length === 0) return { w: 1024, h: 730 };
+      var gw = 1024, gh = 730;
+      var best = candidates[0];
+      var bestScale = Math.min(best.w / gw, best.h / gh);
+      for (var i = 1; i < candidates.length; i++) {
+        var s = candidates[i];
+        var scale = Math.min(s.w / gw, s.h / gh);
+        if (scale < bestScale) {
+          bestScale = scale;
+          best = s;
+        }
+      }
+      return { w: Math.max(MIN_VIEWPORT, best.w), h: Math.max(MIN_VIEWPORT, best.h) };
+    }
+    function centerAndFitGame() {
+      var gameSize = getGameSize(), gw = gameSize.w, gh = gameSize.h;
+      var screen = getScreenWidthHeight(), sw = screen.w, sh = screen.h;
+      var root = document.documentElement;
+      root.setAttribute('data-screen-width', sw);
+      root.setAttribute('data-screen-height', sh);
+      root.style.setProperty('--screen-width', sw + 'px');
+      root.style.setProperty('--screen-height', sh + 'px');
+      if (sw <= 0 || sh <= 0) return;
+      var isPortrait = sh > sw;
+      var promptEl = document.getElementById('rotatePrompt');
+      if (promptEl) {
+        if (isPortrait) {
+          promptEl.classList.remove('hide');
+          promptEl.setAttribute('aria-hidden', 'false');
+        } else {
+          promptEl.classList.add('hide');
+          promptEl.setAttribute('aria-hidden', 'true');
+        }
+      }
+      var useH = isPortrait ? sh * 0.88 : sh;
+      var scale = Math.max(sw / gw, useH / gh);
+      scale = Math.max(0.01, scale);
+      var scaleStr = scale.toFixed(4).replace(/\.?0+$/, '') || '1';
+      root.style.setProperty('--fit-scale', scaleStr);
+    }
+    function run() {
+      centerAndFitGame();
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', run);
+    } else {
+      run();
+    }
+    setTimeout(run, 50);
+    setTimeout(run, 150);
+    setTimeout(run, 300);
+    setTimeout(run, 500);
+    setTimeout(run, 800);
+    setTimeout(run, 1200);
+    var retries = 0;
+    var interval = setInterval(function() {
+      run();
+      if (++retries >= 15) clearInterval(interval);
+    }, 100);
+    setTimeout(function() { clearInterval(interval); }, 1600);
+    function runOnNextFrame() { requestAnimationFrame(function() { run(); }); }
+    window.addEventListener('resize', runOnNextFrame);
+    window.addEventListener('orientationchange', function() { setTimeout(runOnNextFrame, 50); });
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', runOnNextFrame);
+      window.visualViewport.addEventListener('scroll', runOnNextFrame);
+    }
+    if (window.MutationObserver) {
+      var obs = new MutationObserver(function() { run(); });
+      obs.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    }
+    if (window.ResizeObserver) {
+      var ro = new ResizeObserver(function() { run(); });
+      if (document.body) ro.observe(document.body);
+      var lang = document.getElementById('lang');
+      if (lang) ro.observe(lang);
+    }
+  })();
+  </script>
+
+</body>
+</html>
+

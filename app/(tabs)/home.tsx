@@ -39,8 +39,9 @@ import { UnityLauncherService } from '../../services/unityLauncher';
 import { APP_CONFIG } from '../../config/app';
 import { Linking } from 'react-native';
 
-/** Cut the Rope: use config URL (local or production) so one place controls it */
-const CUT_THE_ROPE_URL = APP_CONFIG.HTML5_GAME_CUT_THE_ROPE_URL;
+/** Stickman Hook – Arcade game URL from config */
+const HTML5_GAME_URL = APP_CONFIG.HTML5_GAME_URL;
+const HTML5_GAME_RED_BALL_4_URL = APP_CONFIG.HTML5_GAME_RED_BALL_4_URL;
 
 const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
 
@@ -784,31 +785,32 @@ export default function HomeScreen() {
           </LinearGradient>
         </TouchableOpacity>
 
-        {/* Cut the Rope – commented out for now
+        {/* Arcade – Stickman Hook & Red Ball 4 (like mini games) */}
         <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>ARCADE</Text>
-        <TouchableOpacity
-          activeOpacity={0.8}
-          onPress={() => (navigation as any).navigate('HTML5Game', { title: 'Cut the Rope', url: CUT_THE_ROPE_URL })}
-        >
-          <LinearGradient
-            colors={[theme.card, theme.background]}
-            start={{ x: 1, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={[styles.offerwallCard, { borderColor: theme.primary }]}
+        <View style={styles.gamesGrid}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={[styles.gameCard, { backgroundColor: theme.card, borderColor: theme.primary }]}
+            onPress={() => (navigation as any).navigate('HTML5Game', { title: 'Stickman Hook', url: HTML5_GAME_URL })}
           >
-            <View style={styles.offerwallContent}>
-              <Text style={styles.offerwallIcon}>🪅</Text>
-              <Text style={[styles.offerwallTitle, { color: theme.primary }]}>Cut the Rope</Text>
-              <Text style={[styles.offerwallSubtitle, { color: theme.textSecondary }]}>
-                Feed the candy to Om Nom – cut the ropes!
-              </Text>
-              <View style={[styles.offerwallButton, { backgroundColor: theme.primary }]}>
-                <Text style={[styles.offerwallButtonText, { color: theme.background }]}>PLAY</Text>
-              </View>
-            </View>
-          </LinearGradient>
-        </TouchableOpacity>
-        */}
+            <LinearGradient colors={[theme.card, theme.background]} style={styles.gameIconBg}>
+              <Image source={{ uri: 'https://networks11.com/public/games/stickmanhook/logo.jpg' }} style={styles.arcadeGridIcon} resizeMode="contain" />
+            </LinearGradient>
+            <Text style={[styles.gameName, { color: theme.text }]}>Stickman Hook</Text>
+            <Text style={[styles.cooldownText, { color: theme.textSecondary }]}>Swing to the goal!</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={[styles.gameCard, { backgroundColor: theme.card, borderColor: theme.primary }]}
+            onPress={() => (navigation as any).navigate('HTML5Game', { title: 'Red Ball 4', url: HTML5_GAME_RED_BALL_4_URL, forceLandscape: true })}
+          >
+            <LinearGradient colors={[theme.card, theme.background]} style={styles.gameIconBg}>
+              <Image source={{ uri: 'https://networks11.com/public/games/redball4/icon-256.png' }} style={styles.arcadeGridIcon} resizeMode="contain" />
+            </LinearGradient>
+            <Text style={[styles.gameName, { color: theme.text }]}>Red Ball 4</Text>
+            <Text style={[styles.cooldownText, { color: theme.textSecondary }]}>Roll to victory!</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Mini Games */}
         <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>MINI GAMES</Text>
@@ -1071,6 +1073,17 @@ const styles = StyleSheet.create({
   offerwallIcon: {
     fontSize: 40,
     marginBottom: spacing.md,
+  },
+  arcadeGameIcon: {
+    width: 56,
+    height: 56,
+    marginBottom: spacing.md,
+    borderRadius: 12,
+  },
+  arcadeGridIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 12,
   },
   offerwallTitle: {
     fontSize: typography.xl,

@@ -145,12 +145,13 @@ export default function TasksScreen() {
 
           {loading ? (
             <View style={{ paddingHorizontal: 20, paddingTop: 8 }}>
-              <Skeleton width={140} height={12} style={{ marginBottom: 16 }} borderRadius={4} />
-              <View style={[styles.filterContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                <View style={{ flexDirection: 'row', padding: 4 }}>
-                  <Skeleton width="33%" height={44} borderRadius={12} style={{ marginHorizontal: 2 }} />
-                  <Skeleton width="33%" height={44} borderRadius={12} style={{ marginHorizontal: 2 }} />
-                  <Skeleton width="33%" height={44} borderRadius={12} style={{ marginHorizontal: 2 }} />
+              <View style={[styles.filterSection, { marginBottom: 16 }]}>
+                <View style={[styles.filterContainer, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                  <View style={styles.tabsWrapper}>
+                    <Skeleton width="33%" height={44} borderRadius={12} style={{ marginHorizontal: 2 }} />
+                    <Skeleton width="33%" height={44} borderRadius={12} style={{ marginHorizontal: 2 }} />
+                    <Skeleton width="33%" height={44} borderRadius={12} style={{ marginHorizontal: 2 }} />
+                  </View>
                 </View>
               </View>
               {[1, 2, 3].map((i) => (

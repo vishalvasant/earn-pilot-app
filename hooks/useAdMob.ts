@@ -74,6 +74,18 @@ export function useAdMob() {
     return admobService.getBannerAdIds();
   }, []);
 
+  const getHomeBannerAdIds = useCallback((): [string, string | null] => {
+    return admobService.getHomeBannerAdIds();
+  }, []);
+
+  const getHomeBannerSize = useCallback((): 'BANNER' | 'LARGE_BANNER' | 'MEDIUM_RECTANGLE' => {
+    return admobService.getHomeBannerSize();
+  }, []);
+
+  const shouldShowHomeBanner = useCallback((): boolean => {
+    return admobService.shouldShowHomeBannerAd();
+  }, []);
+
   const getAdRequestOptions = useCallback(() => {
     return admobService.getAdRequestOptions();
   }, []);
@@ -88,6 +100,9 @@ export function useAdMob() {
     shouldShowBanner,
     getBannerAdId,
     getBannerAdIds,
+    getHomeBannerAdIds,
+    getHomeBannerSize,
+    shouldShowHomeBanner,
     getAdRequestOptions,
   };
 }

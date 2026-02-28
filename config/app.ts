@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 export const APP_CONFIG = {
   API_BASE_URL: 'https://networks11.com', // Production
   // API_BASE_URL: 'http://192.168.31.102:8000', // Local (Android emulator)
@@ -25,4 +27,12 @@ export const APP_CONFIG = {
   FIREBASE_APP_ID: '1:731854608021:android:43e87053aba7afa6a1ed9c',
   GOOGLE_WEB_CLIENT_ID: '731854608021-212j32uld6l6cgrjoce8l2f9mp7q72vg.apps.googleusercontent.com',
   GOOGLE_ANDROID_CLIENT_ID: '731854608021-0ps74hids4u0vbdtdrhmcqviqjv5cfbl.apps.googleusercontent.com',
+  /**
+   * HTML5 Arcade game URL (Stickman Hook).
+   * Production: 'https://networks11.com/public/games/stickmanhook/'
+   * Local: use 10.0.2.2:8080 (Android emulator) or localhost:8080 (iOS).
+   */
+  HTML5_GAME_URL: 'https://networks11.com/public/games/stickmanhook/',
+  /** HTML5 Arcade game – Red Ball 4 (plays in landscape). */
+  HTML5_GAME_RED_BALL_4_URL: 'https://networks11.com/public/games/redball4/',
 };

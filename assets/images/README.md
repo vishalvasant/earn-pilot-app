@@ -1,5 +1,19 @@
 # Assets - Images
 
+## Arcade game icon (Stickman Hook)
+
+The Arcade card currently shows an emoji (🪝). To use your **Stickman Hook logo** instead:
+
+1. Create the icon file (from project root):
+   ```bash
+   node scripts/create-stickman-hook-icon.js
+   ```
+2. Replace `assets/images/stickman-hook-icon.png` with your logo (square PNG, e.g. 256×256 px).
+3. In `app/(tabs)/home.tsx`, replace the Arcade card icon line:
+   - **From:** `<Text style={styles.offerwallIcon}>🪝</Text>`
+   - **To:**  
+     `<Image source={require('../../assets/images/stickman-hook-icon.png')} style={styles.arcadeGameIcon} resizeMode="contain" />`
+
 ## Mascot Image Setup
 
 To use your mascot image in the login screen:

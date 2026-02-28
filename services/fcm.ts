@@ -70,9 +70,14 @@ export async function getFCMToken(): Promise<string | null> {
   return null;
 }
 
-// Register device token with backend
+function isNetworkError(error: unknown): boolean {
+  const err = error as { message?: string; code?: string };
+  return err?.message === 'Network Error' || err?.code === 'ERR_NETWORK';
+}
+
+// Register device token with backend (retries once on network error)
 export async function registerDeviceToken(authToken: string, fcmToken: string) {
-  try {
+  const attempt = async (): Promise<boolean> => {
     const response = await api.post(
       `/device-tokens/register`,
       {
@@ -81,13 +86,26 @@ export async function registerDeviceToken(authToken: string, fcmToken: string) {
         device_type: 'Android',
       }
     );
-
     if (response.data.success) {
       console.log('Device token registered successfully');
       return true;
     }
+    return false;
+  };
+
+  try {
+    return await attempt();
   } catch (error) {
-    console.error('Error registering device token:', error);
+    if (isNetworkError(error)) {
+      try {
+        await new Promise((r) => setTimeout(r, 2000));
+        return await attempt();
+      } catch (retryError) {
+        console.error('Error registering device token (retry failed):', retryError);
+      }
+    } else {
+      console.error('Error registering device token:', error);
+    }
   }
   return false;
 }

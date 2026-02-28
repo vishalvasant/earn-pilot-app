@@ -12,6 +12,7 @@ import { getFCMToken, registerDeviceToken, setupMessageHandlers, hasNotification
 // Auth module is used in the store
 import { useAuthStore } from './stores/authStore';
 import { APP_CONFIG } from './config/app';
+import { admobService } from './services/admob';
 
 // Firebase app is auto-initialized by the native SDK; avoid manual initializeApp()
 // console.log('🔥 Firebase apps initialized:', getApps().length);
@@ -31,6 +32,7 @@ import TaskDetailScreen from './app/task-detail';
 import QuizzesScreen from './app/quizzes';
 import QuizPlayScreen from './app/quiz-play';
 import WithdrawScreen from './app/withdraw';
+import HTML5GameScreen from './app/html5-game';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -76,6 +78,11 @@ const MainStack = () => {
         name="Withdraw"
         component={WithdrawScreen}
         options={{ animation: 'slide_from_right', title: 'Withdraw' }}
+      />
+      <Stack.Screen
+        name="HTML5Game"
+        component={HTML5GameScreen}
+        options={{ animation: 'slide_from_right', title: 'Game' }}
       />
     </Stack.Navigator>
   );
@@ -181,6 +188,12 @@ const RootStack = () => {
   const [notificationGranted, setNotificationGranted] = useState(false);
   const { restoreToken, isAuthenticated, isNewUserPendingReferral, token } = useAuthStore();
   const notificationSetupDone = useRef(false);
+  const hasRequestedAppOpenAdRef = useRef(false);
+
+  // Start AdMob + app open ad load as soon as app (splash) starts, so ad is ready when main app shows and home data can load in background
+  useEffect(() => {
+    admobService.initialize();
+  }, []);
 
   // Register FCM token when user is logged in (notification permission already granted at app start).
   useEffect(() => {
@@ -248,6 +261,19 @@ const RootStack = () => {
     });
     return () => sub.remove();
   }, [notificationGranted]);
+
+  // Reset so we show app open again after next sign-in
+  useEffect(() => {
+    if (!isAuthenticated) hasRequestedAppOpenAdRef.current = false;
+  }, [isAuthenticated]);
+
+  // App open ad: after splash (main app shown) or after sign-in. Ad load already started during splash so it can show without waiting.
+  useEffect(() => {
+    if (!notificationGranted || !isAuthenticated || isNewUserPendingReferral) return;
+    if (hasRequestedAppOpenAdRef.current) return;
+    hasRequestedAppOpenAdRef.current = true;
+    setTimeout(() => admobService.requestAppOpenAd(), 300);
+  }, [notificationGranted, isAuthenticated, isNewUserPendingReferral]);
 
   if (isLoading) {
     return <SplashScreen />;

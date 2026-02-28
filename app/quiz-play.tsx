@@ -91,17 +91,22 @@ export default function QuizPlayScreen() {
   const canGoNext = currentIndex < (quiz?.questions?.length || 0) - 1;
   const canGoBack = currentIndex > 0;
 
-  // Show interstitial at this quiz's configured interval (set in admin when creating/editing quiz)
+  // Show rewarded ad at this quiz's configured interval (set in admin when creating/editing quiz) – was interstitial, now rewarded
   const showQuizAds = quiz?.show_quiz_ads !== false;
   const quizAdInterval = Math.max(1, quiz?.quiz_ad_interval ?? 3);
+  const rewardedShownAtIntervalRef = useRef<Set<number>>(new Set());
   useEffect(() => {
     if (!quiz || !showQuizAds || currentIndex <= prevIndexRef.current) return;
     const questionNumber = currentIndex + 1;
-    if (questionNumber > 0 && questionNumber % quizAdInterval === 0) {
-      showInterstitial?.();
+    if (questionNumber > 0 && questionNumber % quizAdInterval === 0 && config?.show_rewarded_ads) {
+      const key = questionNumber;
+      if (!rewardedShownAtIntervalRef.current.has(key)) {
+        rewardedShownAtIntervalRef.current.add(key);
+        showRewarded?.(() => {});
+      }
     }
     prevIndexRef.current = currentIndex;
-  }, [quiz, currentIndex, showQuizAds, quizAdInterval, showInterstitial]);
+  }, [quiz, currentIndex, showQuizAds, quizAdInterval, showRewarded, config?.show_rewarded_ads]);
 
   const onSubmit = async () => {
     if (!quiz) return;
@@ -150,19 +155,32 @@ export default function QuizPlayScreen() {
   if (loading) {
     return (
       <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
-        <View style={{ paddingHorizontal: 20, paddingTop: 50, paddingBottom: 24 }}>
-          <Skeleton width={80} height={14} style={{ marginBottom: 24 }} borderRadius={4} />
-          <Skeleton width="100%" height={20} borderRadius={4} />
-          <Skeleton width="90%" height={16} style={{ marginTop: 12 }} borderRadius={4} />
-          <View style={{ marginTop: 24, gap: 12 }}>
-            {[1, 2, 3, 4].map((i) => (
-              <View key={i} style={[styles.option, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                <Skeleton width="85%" height={18} borderRadius={4} />
-              </View>
-            ))}
-          </View>
-          <Skeleton width={120} height={48} style={{ marginTop: 32, alignSelf: 'flex-end' }} borderRadius={12} />
+        <View style={styles.topHeader}>
+          <Skeleton width={40} height={40} borderRadius={20} />
+          <Skeleton width={160} height={22} borderRadius={4} />
+          <View style={{ width: 40 }} />
         </View>
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: shouldShowBanner ? 100 : 30 }} showsVerticalScrollIndicator={false}>
+          <View style={[styles.progressRow, { borderColor: theme.border }]}>
+            <Skeleton width={100} height={14} borderRadius={4} />
+            <Skeleton width={60} height={14} borderRadius={4} />
+          </View>
+          <View style={[styles.questionCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <Skeleton width="100%" height={20} borderRadius={4} />
+            <Skeleton width="90%" height={16} style={{ marginTop: 12 }} borderRadius={4} />
+            <View style={{ marginTop: 16, gap: 12 }}>
+              {[1, 2, 3, 4].map((i) => (
+                <View key={i} style={[styles.option, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                  <Skeleton width="85%" height={18} borderRadius={4} />
+                </View>
+              ))}
+            </View>
+          </View>
+          <View style={styles.actionsRow}>
+            <Skeleton width={80} height={44} borderRadius={12} />
+            <Skeleton width={100} height={44} borderRadius={12} />
+          </View>
+        </ScrollView>
         {resultPopup && (
           <ThemedPopup
             visible={!!resultPopup}

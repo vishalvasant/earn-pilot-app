@@ -150,13 +150,21 @@ export default function WithdrawScreen() {
           <Skeleton width={120} height={20} borderRadius={4} />
           <View style={{ width: 40 }} />
         </View>
-        <View style={{ paddingHorizontal: 20 }}>
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={[styles.balanceCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
             <Skeleton width={140} height={14} borderRadius={4} />
             <Skeleton width={120} height={28} style={{ marginTop: 12 }} borderRadius={4} />
             <Skeleton width={180} height={14} style={{ marginTop: 8 }} borderRadius={4} />
           </View>
           <Skeleton width={100} height={12} style={{ marginTop: 24, marginBottom: 12 }} borderRadius={4} />
+          <View style={[styles.optionCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View style={{ flex: 1, gap: 6 }}>
+              <Skeleton width={160} height={18} borderRadius={4} />
+              <Skeleton width={120} height={14} borderRadius={4} />
+            </View>
+            <Skeleton width={60} height={24} borderRadius={6} />
+          </View>
+          <Skeleton width={90} height={12} style={{ marginTop: 24, marginBottom: 12 }} borderRadius={4} />
           <View style={{ gap: 12 }}>
             {[1, 2, 3].map((i) => (
               <View key={i} style={[styles.couponCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -168,7 +176,7 @@ export default function WithdrawScreen() {
               </View>
             ))}
           </View>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -190,7 +198,10 @@ export default function WithdrawScreen() {
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          shouldShowBanner ? { paddingBottom: 100 } : null,
+        ]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />}
       >
         <View style={[styles.balanceCard, { backgroundColor: theme.card, borderColor: theme.border }]}>

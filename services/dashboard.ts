@@ -2,6 +2,11 @@
 import { api } from './api';
 import { useDataStore } from '../stores/dataStore';
 
+function isNetworkError(error: unknown): boolean {
+  const err = error as { message?: string; code?: string };
+  return err?.message === 'Network Error' || err?.code === 'ERR_NETWORK';
+}
+
 export interface DashboardData {
   balance: number;
   energy_points: number;
@@ -28,53 +33,47 @@ export interface DashboardResponse {
   data: DashboardData;
 }
 
+const fetchDashboardFromApi = async () => {
+  const [walletResponse, activityResponse] = await Promise.all([
+    api.get('/wallet/balance'),
+    api.get('/wallet/activity?per_page=5'),
+  ]);
+  const walletData = walletResponse.data.data;
+  const recentActivities = activityResponse.data.data;
+  const dataStore = useDataStore.getState();
+  const tasks = dataStore.tasks || [];
+  const pendingTasks = tasks.filter((task: any) => task.status === 'available' && !task.disabled).length;
+  const completedTasks = tasks.filter((task: any) => task.status === 'completed').length;
+  return {
+    success: true,
+    data: {
+      balance: walletData.balance,
+      energy_points: walletData.energy_points,
+      pending_amount: walletData.pending_amount,
+      total_withdrawn: walletData.total_withdrawn,
+      total_earned: walletData.total_earned,
+      lifetime_points: walletData.lifetime_points,
+      pending_tasks: pendingTasks,
+      completed_tasks: completedTasks,
+      recent_activities: recentActivities,
+    },
+  };
+};
+
 export const getDashboardDetails = async (): Promise<DashboardResponse> => {
   try {
-    // Try to get tasks from store first (to avoid duplicate API call)
-    const dataStore = useDataStore.getState();
-    let tasks = dataStore.tasks;
-    
-    // If tasks are not in store or stale, fetch them
-    if (tasks.length === 0) {
-      try {
-        await dataStore.fetchTasks();
-        tasks = useDataStore.getState().tasks;
-      } catch (error) {
-        console.warn('Failed to fetch tasks from store, fetching directly:', error);
-        // Fallback to direct API call
-        const tasksResponse = await api.get('/tasks');
-        tasks = tasksResponse.data.data || [];
-      }
-    }
-    
-    // Fetch wallet balance and stats (primary data source) in parallel with activity
-    const [walletResponse, activityResponse] = await Promise.all([
-      api.get('/wallet/balance'),
-      api.get('/wallet/activity?per_page=5'),
-    ]);
-    
-    const walletData = walletResponse.data.data;
-    const recentActivities = activityResponse.data.data;
-    
-    const pendingTasks = tasks.filter((task: any) => task.status === 'available' && !task.disabled).length;
-    const completedTasks = tasks.filter((task: any) => task.status === 'completed').length;
-
-    return {
-      success: true,
-      data: {
-        balance: walletData.balance,
-        energy_points: walletData.energy_points,
-        pending_amount: walletData.pending_amount,
-        total_withdrawn: walletData.total_withdrawn,
-        total_earned: walletData.total_earned,
-        lifetime_points: walletData.lifetime_points,
-        pending_tasks: pendingTasks,
-        completed_tasks: completedTasks,
-        recent_activities: recentActivities,
-      },
-    };
+    return await fetchDashboardFromApi();
   } catch (error) {
-    console.error('Error fetching dashboard data:', error);
+    if (isNetworkError(error)) {
+      try {
+        await new Promise((r) => setTimeout(r, 1500));
+        return await fetchDashboardFromApi();
+      } catch (retryError) {
+        console.error('Error fetching dashboard data (retry failed):', retryError);
+      }
+    } else {
+      console.error('Error fetching dashboard data:', error);
+    }
     // Fallback to profile endpoint if wallet endpoint fails
     try {
       const profileResponse = await api.get('/profile');
