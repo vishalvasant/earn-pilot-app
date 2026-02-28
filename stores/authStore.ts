@@ -1,7 +1,3 @@
-/**
- * Auth store – Google Sign-In only.
- * Checkpoint: before new auth added (admin-created users / email+password login).
- */
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import '@react-native-firebase/app'; // Import app first to ensure initialization
