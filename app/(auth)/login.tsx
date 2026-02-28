@@ -3,6 +3,7 @@ import { useNavigation } from '@react-navigation/native';
 import {
   SafeAreaView,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
   StyleSheet,
@@ -13,6 +14,7 @@ import {
   Platform,
   ActivityIndicator,
   Modal,
+  ScrollView,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { themeColors, typography, spacing, borderRadius } from '../../hooks/useThemeColors';
@@ -24,7 +26,10 @@ export default function LoginScreen() {
   const navigation = useNavigation();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { googleSignIn } = useAuthStore();
+  const [showEmailForm, setShowEmailForm] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const { googleSignIn, emailSignIn } = useAuthStore();
 
   const logoPulse = useRef(new Animated.Value(1)).current;
   const progressBarWidth = useRef(new Animated.Value(0)).current;
@@ -75,19 +80,30 @@ export default function LoginScreen() {
   const handleGoogleSignIn = async () => {
     setLoading(true);
     setError('');
-    
-    // Small delay to ensure our overlay is fully rendered before native UI appears
     await new Promise(resolve => setTimeout(resolve, 100));
-    
     try {
       await googleSignIn();
-      // Store drives UI: new users get ReferralCode (isNewUserPendingReferral), others get MainApp
     } catch (err: any) {
       console.error('Sign-in error:', err);
       setError(err.message || 'Failed to sign in. Please try again.');
       setLoading(false);
     }
-    // Note: Don't set loading to false on success as navigation will unmount the component
+  };
+
+  const handleEmailSignIn = async () => {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !password) {
+      setError('Please enter email and password.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      await emailSignIn(trimmedEmail, password);
+    } catch (err: any) {
+      setError(err.message || 'Sign in failed. Please try again.');
+      setLoading(false);
+    }
   };
 
   return (
@@ -116,7 +132,12 @@ export default function LoginScreen() {
           />
 
           {/* Content */}
-          <View style={styles.content}>
+          <ScrollView
+            style={styles.flex}
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
             {/* Logo */}
             <Animated.View
               style={{
@@ -130,44 +151,107 @@ export default function LoginScreen() {
               <Text style={styles.tagline}>Earn Like Pro</Text>
             </Animated.View>
 
-            {/* Description */}
-            <View style={styles.descriptionContainer}>
-              <Text style={styles.descriptionText}>
-                Sign in with your Google account to get started
-              </Text>
-            </View>
+            {!showEmailForm ? (
+              <>
+                <View style={styles.descriptionContainer}>
+                  <Text style={styles.descriptionText}>
+                    Sign in with Google or use credentials created by your admin
+                  </Text>
+                </View>
 
-            {/* Google Sign-In Button */}
-            <TouchableOpacity
-              onPress={handleGoogleSignIn}
-              disabled={loading}
-              activeOpacity={0.8}
-              style={[styles.googleButtonContainer, loading && styles.googleButtonDisabled]}
-            >
-              <LinearGradient
-                colors={[themeColors.primaryBlue, themeColors.deepBlue]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.googleButtonGradient}
-              >
-                <Text style={styles.googleButtonText}>Sign in with Google</Text>
-              </LinearGradient>
-            </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleGoogleSignIn}
+                  disabled={loading}
+                  activeOpacity={0.8}
+                  style={[styles.googleButtonContainer, loading && styles.googleButtonDisabled]}
+                >
+                  <LinearGradient
+                    colors={[themeColors.primaryBlue, themeColors.deepBlue]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.googleButtonGradient}
+                  >
+                    <Text style={styles.googleButtonText}>Sign in with Google</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
 
-            {/* Error Message */}
+                <TouchableOpacity
+                  onPress={() => { setShowEmailForm(true); setError(''); setEmail(''); setPassword(''); }}
+                  disabled={loading}
+                  style={styles.emailToggleButton}
+                >
+                  <Text style={styles.emailToggleText}>Sign in with Email</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <View style={styles.descriptionContainer}>
+                  <Text style={styles.descriptionText}>
+                    Enter the email and password provided by your admin
+                  </Text>
+                </View>
+
+                <TextInput
+                  style={styles.input}
+                  placeholder="Email"
+                  placeholderTextColor={themeColors.textDim}
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!loading}
+                />
+                <TextInput
+                  style={[styles.input, { marginTop: spacing.md }]}
+                  placeholder="Password"
+                  placeholderTextColor={themeColors.textDim}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                  editable={!loading}
+                />
+
+                <TouchableOpacity
+                  onPress={handleEmailSignIn}
+                  disabled={loading}
+                  activeOpacity={0.8}
+                  style={[styles.googleButtonContainer, loading && styles.googleButtonDisabled]}
+                >
+                  <LinearGradient
+                    colors={[themeColors.primaryBlue, themeColors.deepBlue]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.googleButtonGradient}
+                  >
+                    <Text style={styles.googleButtonText}>Sign in</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => { setShowEmailForm(false); setError(''); }}
+                  disabled={loading}
+                  style={styles.emailToggleButton}
+                >
+                  <Text style={styles.emailToggleText}>Back to Google sign in</Text>
+                </TouchableOpacity>
+              </>
+            )}
+
             {error ? (
               <View style={styles.errorContainer}>
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             ) : null}
 
-            {/* Info Text */}
             <View style={styles.infoContainer}>
               <Text style={styles.infoText}>
-                We use your Google account to keep your progress safe and secure.
+                {showEmailForm
+                  ? 'Use the email and password your admin gave you.'
+                  : 'We use your Google account or admin-created credentials to keep your progress safe.'}
               </Text>
             </View>
-          </View>
+          </ScrollView>
         </SafeAreaView>
       </KeyboardAvoidingView>
 
@@ -267,6 +351,26 @@ const styles = StyleSheet.create({
     fontSize: typography.lg,
     fontWeight: '700',
     letterSpacing: 0.5,
+  },
+  emailToggleButton: {
+    paddingVertical: spacing.lg,
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
+  emailToggleText: {
+    color: themeColors.primaryBlue,
+    fontSize: typography.base,
+    fontWeight: '600',
+  },
+  input: {
+    backgroundColor: themeColors.surface,
+    borderWidth: 1,
+    borderColor: themeColors.border,
+    borderRadius: borderRadius.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.lg,
+    fontSize: typography.base,
+    color: themeColors.textMain,
   },
   errorContainer: {
     backgroundColor: 'rgba(239, 68, 68, 0.1)',

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import '@react-native-firebase/app'; // Import app first to ensure initialization
 import auth from '@react-native-firebase/auth';
@@ -36,6 +37,7 @@ interface AuthState {
   restoreToken: () => Promise<void>;
   setAuth: (payload: { token: string; user: User }) => Promise<void>;
   googleSignIn: () => Promise<{ is_new_user: boolean; user: User; token: string } | void>;
+  emailSignIn: (email: string, password: string) => Promise<{ is_new_user: boolean; user: User; token: string } | void>;
   clearNewUserPendingReferral: () => void;
   logout: () => Promise<void>;
   /** Called on 401 – clears local auth only (no API call). Navigator will redirect to login. */
@@ -239,6 +241,66 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
+  emailSignIn: async (email: string, password: string) => {
+    set({ isLoading: true, error: null });
+    const deviceType = Platform.OS === 'ios' ? 'iOS' : 'Android';
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    try {
+      const response = await fetch(
+        `${APP_CONFIG.API_BASE_URL}/api/auth/login`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({
+            email: email.trim(),
+            password,
+            app_identifier: APP_CONFIG.APP_IDENTIFIER,
+            fcm_token: '',
+            device_type: deviceType,
+          }),
+          signal: controller.signal,
+        }
+      );
+      clearTimeout(timeoutId);
+      let data: any;
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error(`Server returned invalid response (${response.status}). Please try again.`);
+      }
+      if (!response.ok) {
+        const msg = data?.message || data?.errors?.email?.[0] || data?.error || `Login failed: ${response.status}`;
+        throw new Error(msg);
+      }
+      if (data.success && data.user && data.token) {
+        const isNewUser = !!data.is_new_user;
+        await AsyncStorage.setItem('auth_token', data.token);
+        await AsyncStorage.setItem('user_data', JSON.stringify(data.user));
+        set({
+          token: data.token,
+          user: data.user,
+          isAuthenticated: true,
+          isNewUserPendingReferral: isNewUser,
+          isLoading: false,
+          error: null,
+        });
+        return { is_new_user: isNewUser, user: data.user, token: data.token };
+      }
+      throw new Error(data?.message || 'Login failed: Invalid response from server');
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        throw new Error('Network timeout - please check your internet connection');
+      }
+      if (err.message?.includes('Network request failed') || err.message?.includes('Failed to fetch')) {
+        throw new Error('Cannot connect to server. Please check your internet connection.');
+      }
+      set({ error: err.message || 'Sign in failed', isLoading: false });
+      throw err;
+    }
+  },
+
   clearNewUserPendingReferral: () => {
     set({ isNewUserPendingReferral: false });
   },
@@ -246,7 +308,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   logout: async () => {
     try {
       const token = get().token;
-      // Call APIs before clearing – device deactivate needs valid token; logout invalidates token
+      const user = get().user;
       if (token) {
         try {
           const { cleanupDeviceToken } = await import('../services/fcm');
@@ -257,8 +319,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           await apiLogout();
         } catch (_e) { /* ignore */ }
       }
-      await GoogleSignin.signOut();
-      await auth().signOut();
+      if (user?.google_id) {
+        try {
+          await GoogleSignin.signOut();
+          await auth().signOut();
+        } catch (_e) { /* ignore */ }
+      }
       await AsyncStorage.removeItem('auth_token');
       await AsyncStorage.removeItem('user_data');
       set({ token: null, user: null, isAuthenticated: false, isNewUserPendingReferral: false });
