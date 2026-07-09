@@ -1,9 +1,8 @@
 import { Platform } from 'react-native';
 
 export const APP_CONFIG = {
-  API_BASE_URL: 'https://networks11.com', // Production
-  // API_BASE_URL: 'http://192.168.31.102:8000', // Local (Android emulator)
   // API_BASE_URL: 'http://10.0.2.2:8000', // Local (Android emulator)
+  API_BASE_URL: 'https://networks11.com', // Production
   APP_IDENTIFIER: 'earn-pilot',
   /** Fallback store URL for add-on games – COMMENTED: not using add-on games as of now. Append package_name for Play Store. */
   ADDON_GAME_STORE_URL: 'https://play.google.com/store/apps/details?id=',
@@ -33,6 +32,12 @@ export const APP_CONFIG = {
    * Local: use 10.0.2.2:8080 (Android emulator) or localhost:8080 (iOS).
    */
   HTML5_GAME_URL: 'https://networks11.com/public/games/stickmanhook/',
-  /** HTML5 Arcade game – Red Ball 4 (plays in landscape). */
-  HTML5_GAME_RED_BALL_4_URL: 'https://networks11.com/public/games/redball4/',
+  /** HTML5 Arcade game – Bubble Tower 3D (Famobi). */
+  HTML5_GAME_BUBBLE_TOWER_3D_URL: 'https://play.famobi.com/bubble-tower-3d',
+  /** HTML5 Arcade game – Om Nom Bounce. Server issue: Cloudflare challenge on this URL can block WebView – see docs/HTML5_GAME_URL_CHECK.md. */
+  HTML5_GAME_OMNOMBOUNCE_URL: 'https://networks11.com/public/games/omnombounce/',
+  // HTML5_GAME_OMNOMBOUNCE_URL: 'http://10.0.2.2:8080/', // Uncomment to test locally (serve from games/omnombounce).
+  /** HTML5 Arcade game – Stack Ball (portrait). Server issue: assets/images/gamelogo.png returns 404 – see docs/HTML5_GAME_URL_CHECK.md. */
+  HTML5_GAME_STACKBALL_URL: 'https://networks11.com/public/games/stackball/',
+  // HTML5_GAME_STACKBALL_URL: 'http://10.0.2.2:8080/', // Uncomment to test locally.
 };

@@ -54,8 +54,8 @@ export function useAdMob() {
     return await admobService.showInterstitialAd();
   }, []);
 
-  const showRewarded = useCallback(async (onRewarded: () => void): Promise<boolean> => {
-    return await admobService.showRewardedAd(onRewarded);
+  const showRewarded = useCallback(async (onRewarded: () => void, options?: { skipGenericReward?: boolean }): Promise<boolean> => {
+    return await admobService.showRewardedAd(onRewarded, options);
   }, []);
 
   const getRemainingRewardedAds = useCallback((): number => {

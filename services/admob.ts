@@ -76,6 +76,8 @@ export interface AdMobConfig {
 class AdMobService {
   private config: AdMobConfig | null = null;
   private initialized = false;
+  /** Single-flight: concurrent callers await the same init so we don't load ads multiple times on app load. */
+  private initPromise: Promise<void> | null = null;
   private interstitialAd: any | null = null;
   private interstitialLoaded = false;
   private rewardedAd: any | null = null;
@@ -83,9 +85,13 @@ class AdMobService {
   private appOpenLoaded = false;
   /** Set when app becomes active so we show app open once ad loads (e.g. cold start). Cleared when we show or leave active. */
   private pendingShowAppOpenOnLoad = false;
-  /** Back-off: retry app open load after this delay (ms) on error to avoid "too many failed requests". */
+  /** Back-off: retry ad load after this delay (ms) on error to avoid "too many failed requests" and log spam. */
   private static readonly APP_OPEN_RETRY_DELAY_MS = 10000;
+  private static readonly INTERSTITIAL_RETRY_DELAY_MS = 20000;
+  private static readonly REWARDED_RETRY_DELAY_MS = 20000;
   private appOpenRetryTimeout: ReturnType<typeof setTimeout> | null = null;
+  private interstitialRetryTimeout: ReturnType<typeof setTimeout> | null = null;
+  private rewardedRetryTimeout: ReturnType<typeof setTimeout> | null = null;
   /** Previous AppState for refetch on active. */
   private lastAppState: AppStateStatus = 'active';
   private interstitialAdShownCount = 0;
@@ -99,57 +105,50 @@ class AdMobService {
 
   async initialize(): Promise<void> {
     if (this.initialized) return;
+    if (this.initPromise) return this.initPromise;
 
-    try {
-      // If AdMob module is not available, skip initialization
-      if (!admobModuleAvailable) {
-        // AdMob not available (native module not loaded)
-        this.initialized = true;
-        return;
-      }
-
-      // console.log('🚀 Initializing Google Mobile Ads SDK');
+    this.initPromise = (async () => {
       try {
-        await mobileAds().initialize();
-        // console.log('✅ Google Mobile Ads SDK initialized');
-      } catch (e: any) {
-        // console.error('❌ mobileAds().initialize() failed:', e?.message || e);
-        if (e?.stack) console.error('Stack:', e.stack);
-        return;
-      }
-
-      await this.fetchConfig();
-      this.setupAppStateRefetch();
-
-      // Load app open ad first so it is ready when main app shows; home/data can load in background
-      if (this.config?.show_app_open_ads) {
-        try {
-          this.loadAppOpenAd();
-        } catch (e: any) {
-          // console.warn('⚠️ Failed to load app open ad:', e?.message || e);
+        // If AdMob module is not available, skip initialization
+        if (!admobModuleAvailable) {
+          this.initialized = true;
+          return;
         }
-      }
-      if (this.config?.show_interstitial_ads) {
-        try {
-          this.loadInterstitialAd();
-        } catch (e: any) {
-          // console.warn('⚠️ Failed to load interstitial ad:', e?.message || e);
-        }
-      }
-      if (this.config?.show_rewarded_ads) {
-        try {
-          this.loadRewardedAd();
-        } catch (e: any) {
-          // console.warn('⚠️ Failed to load rewarded ad:', e?.message || e);
-        }
-      }
 
-      this.initialized = true;
-      // console.log('✅ AdMob fully initialized and ready');
-    } catch (error: any) {
-      // console.error('❌ Failed to initialize AdMob (outer):', error?.message || error);
-      if (error?.stack) console.error('Stack:', error.stack);
-    }
+        try {
+          await mobileAds().initialize();
+        } catch (e: any) {
+          if (e?.stack) console.error('Stack:', e.stack);
+          return;
+        }
+
+        await this.fetchConfig();
+        this.setupAppStateRefetch();
+
+        // Load app open ad first so it is ready when main app shows; home/data can load in background
+        if (this.config?.show_app_open_ads) {
+          try {
+            this.loadAppOpenAd();
+          } catch (e: any) {}
+        }
+        if (this.config?.show_interstitial_ads) {
+          try {
+            this.loadInterstitialAd();
+          } catch (e: any) {}
+        }
+        if (this.config?.show_rewarded_ads) {
+          try {
+            this.loadRewardedAd();
+          } catch (e: any) {}
+        }
+
+        this.initialized = true;
+      } catch (error: any) {
+        if (error?.stack) console.error('Stack:', error.stack);
+      }
+    })();
+
+    return this.initPromise;
   }
 
   private appStateSubscription: { remove: () => void } | null = null;
@@ -160,9 +159,9 @@ class AdMobService {
     this.appStateSubscription = AppState.addEventListener('change', (state: AppStateStatus) => {
       this.lastAppState = state;
       if (state === 'active') {
+        // Only refetch config and reload app-open on focus. Rewarded/interstitial are loaded once
+        // on init and again after each show/close/error to avoid many rewarded-ad calls on app load.
         this.fetchConfig().then(() => {
-          if (this.config?.show_interstitial_ads) this.loadInterstitialAd();
-          if (this.config?.show_rewarded_ads) this.loadRewardedAd();
           if (this.config?.show_app_open_ads) this.loadAppOpenAd();
         });
       }
@@ -366,6 +365,10 @@ class AdMobService {
 
   loadInterstitialAd(): void {
     if (this.isAdMobUnavailable || !this.config?.show_interstitial_ads) return;
+    if (this.interstitialRetryTimeout != null) {
+      clearTimeout(this.interstitialRetryTimeout);
+      this.interstitialRetryTimeout = null;
+    }
     const adId = this.getInterstitialAdId();
 
     this.interstitialAd = InterstitialAd.createForAdRequest(adId, this.getAdRequestOptions());
@@ -384,7 +387,11 @@ class AdMobService {
     this.interstitialAd.addAdEventListener(AdEventType.ERROR, (error: any) => {
       console.warn('📺 Interstitial error:', error?.message || error);
       this.interstitialLoaded = false;
-      this.loadInterstitialAd();
+      this.interstitialAd = null;
+      this.interstitialRetryTimeout = setTimeout(() => {
+        this.interstitialRetryTimeout = null;
+        this.loadInterstitialAd();
+      }, AdMobService.INTERSTITIAL_RETRY_DELAY_MS);
     });
 
     this.interstitialAd.load();
@@ -426,6 +433,10 @@ class AdMobService {
 
   loadRewardedAd(): void {
     if (this.isAdMobUnavailable || !this.config?.show_rewarded_ads) return;
+    if (this.rewardedRetryTimeout != null) {
+      clearTimeout(this.rewardedRetryTimeout);
+      this.rewardedRetryTimeout = null;
+    }
     const adId = this.getRewardedAdId();
 
     this.rewardedAd = RewardedAd.createForAdRequest(adId, this.getAdRequestOptions());
@@ -442,13 +453,18 @@ class AdMobService {
 
     this.rewardedAd.addAdEventListener(AdEventType.ERROR, (error: any) => {
       console.warn('📺 Rewarded error:', error?.message || error);
-      this.loadRewardedAd();
+      this.rewardedAd = null;
+      this.rewardedRetryTimeout = setTimeout(() => {
+        this.rewardedRetryTimeout = null;
+        this.loadRewardedAd();
+      }, AdMobService.REWARDED_RETRY_DELAY_MS);
     });
 
     this.rewardedAd.load();
   }
 
-  async showRewardedAd(onRewarded: () => void): Promise<boolean> {
+  async showRewardedAd(onRewarded: () => void, options?: { skipGenericReward?: boolean }): Promise<boolean> {
+    const skipGeneric = options?.skipGenericReward === true;
     // Fallback when native AdMob is unavailable: simulate rewarded flow for dev
     if (this.isAdMobUnavailable) {
       if (!this.config?.show_rewarded_ads) {
@@ -467,30 +483,22 @@ class AdMobService {
       }
 
       try {
-        // Simulating rewarded ad (3s delay) when native module unavailable
-        // Simulate an ad playback delay
         await new Promise<void>((resolve) => setTimeout(resolve, 3000));
-
         this.rewardedAdsWatchedToday++;
-
-        try {
-          // Try to get user ID from profile store first
-          let userId = useUserStore.getState().profile?.id;
-          if (!userId) {
-            try {
-              const profileRes = await getProfile();
-              userId = profileRes?.user?.id;
-            } catch (e) {
-              // ignore
+        if (!skipGeneric) {
+          try {
+            let userId = useUserStore.getState().profile?.id;
+            if (!userId) {
+              try {
+                const profileRes = await getProfile();
+                userId = profileRes?.user?.id;
+              } catch (e) {}
             }
-          }
-          if (userId) {
-            await api.post('/admob/rewarded-ad-completed', { user_id: userId });
-          }
-        } catch (error) {
-          // ignore
+            if (userId) {
+              await api.post('/admob/rewarded-ad-completed', { user_id: userId });
+            }
+          } catch (error) {}
         }
-
         onRewarded();
         return true;
       } catch (error) {
@@ -525,33 +533,27 @@ class AdMobService {
       // If show() completes without error, user watched the ad
       this.rewardedAdsWatchedToday++;
       
-      // Notify backend and trigger callback + refresh profile
-      try {
-        // Try to get user ID from profile store first, then fetch if missing
-        let userId = useUserStore.getState().profile?.id;
-        if (!userId) {
-          try {
-            const profileRes = await getProfile();
-            userId = profileRes?.user?.id;
-          } catch (e) {
-            // ignore
+      // Generic "watch ad for points" (wallet): only when not skipped (e.g. HTML5 level-complete uses its own API)
+      if (!skipGeneric) {
+        try {
+          let userId = useUserStore.getState().profile?.id;
+          if (!userId) {
+            try {
+              const profileRes = await getProfile();
+              userId = profileRes?.user?.id;
+            } catch (e) {}
           }
-        }
-        if (userId) {
-          await api.post('/admob/rewarded-ad-completed', { user_id: userId });
-          try {
-            const profileRes = await getProfile();
-            const setProfile = useUserStore.getState().setProfile;
-            setProfile(profileRes?.user ? profileRes?.user : profileRes);
-          } catch (e) {
-            // ignore
+          if (userId) {
+            await api.post('/admob/rewarded-ad-completed', { user_id: userId });
+            try {
+              const profileRes = await getProfile();
+              const setProfile = useUserStore.getState().setProfile;
+              setProfile(profileRes?.user ? profileRes?.user : profileRes);
+            } catch (e) {}
           }
-          onRewarded();
-        }
-      } catch (error) {
-        // ignore backend notify
+        } catch (error) {}
       }
-      
+      onRewarded();
       return true;
     } catch (error) {
       // console.error('Failed to show rewarded ad:', error);

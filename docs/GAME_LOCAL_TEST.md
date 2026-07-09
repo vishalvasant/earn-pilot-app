@@ -62,10 +62,23 @@ npm run android
    - Game **fits** the screen (no stretching; black letterboxing if needed).
    - **Aspect ratio** looks correct.
 
-## 5. Switch back to production
+## 5. Om Nom Bounce & Stack Ball (local)
+
+To test **Om Nom Bounce** or **Stack Ball** locally, serve the game folder (e.g. `omnombounce/` or `stackball/`) on port 8080, then in `config/app.ts` temporarily set:
+
+```ts
+HTML5_GAME_OMNOMBOUNCE_URL: 'http://10.0.2.2:8080/',  // Android emulator
+// or HTML5_GAME_STACKBALL_URL: 'http://10.0.2.2:8080/',
+```
+
+If the game fails to load, the app shows an error overlay with the message (e.g. HTTP 404, or WebView error). Use **Retry** to reload. Check Metro and device logs for `📺 WebView error:` or `📺 WebView HTTP error:`.
+
+## 6. Switch back to production
 
 When done testing, in `config/app.ts` restore:
 
 ```ts
 HTML5_GAME_URL: 'https://networks11.com/public/games/stickmanhook/',
+HTML5_GAME_OMNOMBOUNCE_URL: 'https://networks11.com/public/games/omnombounce/',
+HTML5_GAME_STACKBALL_URL: 'https://networks11.com/public/games/stackball/',
 ```

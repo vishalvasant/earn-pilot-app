@@ -84,8 +84,11 @@ export default function LoginScreen() {
     try {
       await googleSignIn();
     } catch (err: any) {
-      console.error('Sign-in error:', err);
-      setError(err.message || 'Failed to sign in. Please try again.');
+      const msg = err?.message ?? '';
+      if (!msg.includes('Google Sign-In is not configured')) {
+        console.warn('Sign-in error:', msg || err);
+      }
+      setError(msg || 'Failed to sign in. Please try again.');
       setLoading(false);
     }
   };

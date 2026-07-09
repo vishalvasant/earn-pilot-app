@@ -32,16 +32,18 @@ import MathQuizGame from '../../components/games/MathQuizGame';
 import MemoryPatternGame from '../../components/games/MemoryPatternGame';
 import ThemedPopup from '../../components/ThemedPopup';
 import { useAuthStore } from '../../stores/authStore';
-import { getFCMToken, registerDeviceToken, setupMessageHandlers } from '../../services/fcm';
+import { getFCMToken, registerDeviceToken } from '../../services/fcm';
 import FixedBannerAd from '../../components/FixedBannerAd';
 import Skeleton from '../../components/Skeleton';
 import { UnityLauncherService } from '../../services/unityLauncher';
 import { APP_CONFIG } from '../../config/app';
 import { Linking } from 'react-native';
 
-/** Stickman Hook – Arcade game URL from config */
+/** Arcade game URLs from config */
 const HTML5_GAME_URL = APP_CONFIG.HTML5_GAME_URL;
-const HTML5_GAME_RED_BALL_4_URL = APP_CONFIG.HTML5_GAME_RED_BALL_4_URL;
+const HTML5_GAME_BUBBLE_TOWER_3D_URL = APP_CONFIG.HTML5_GAME_BUBBLE_TOWER_3D_URL;
+const HTML5_GAME_OMNOMBOUNCE_URL = APP_CONFIG.HTML5_GAME_OMNOMBOUNCE_URL;
+const HTML5_GAME_STACKBALL_URL = APP_CONFIG.HTML5_GAME_STACKBALL_URL;
 
 const { height: screenHeight, width: screenWidth } = Dimensions.get('window');
 
@@ -127,6 +129,30 @@ export default function HomeScreen() {
   const [addOnGameInstalledMap, setAddOnGameInstalledMap] = useState<Record<number, boolean | null>>({});
   /** Incremented when home tab gains focus so we re-check installed state (e.g. after user installs from store). */
   const [addOnGamesRefreshKey, setAddOnGamesRefreshKey] = useState(0);
+
+  /** HTML5 Arcade – points per level for home labels */
+  const [arcadeConfig, setArcadeConfig] = useState<Record<string, { points_per_level?: number }>>({});
+
+  /** Subtle pulse animation for arcade "Earn X pts per level" labels */
+  const arcadeLabelScale = useRef(new Animated.Value(1)).current;
+  const arcadeLabelOpacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const scaleLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(arcadeLabelScale, { toValue: 1.06, duration: 1000, useNativeDriver: true }),
+        Animated.timing(arcadeLabelScale, { toValue: 1, duration: 1000, useNativeDriver: true }),
+      ])
+    );
+    const opacityLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(arcadeLabelOpacity, { toValue: 0.82, duration: 1200, useNativeDriver: true }),
+        Animated.timing(arcadeLabelOpacity, { toValue: 1, duration: 1200, useNativeDriver: true }),
+      ])
+    );
+    scaleLoop.start();
+    opacityLoop.start();
+    return () => { scaleLoop.stop(); opacityLoop.stop(); };
+  }, [arcadeLabelScale, arcadeLabelOpacity]);
   
   // Use centralized data store
   const { 
@@ -176,8 +202,7 @@ export default function HomeScreen() {
                 if (authToken) await registerDeviceToken(authToken, fcmToken);
               }
             })
-            .catch((err) => console.warn('FCM token error (enable notifications in app Settings):', err));
-          setupMessageHandlers();
+            .catch(() => {});
         }, 500);
 
         // Start all fetches in parallel (no await yet)
@@ -311,6 +336,13 @@ export default function HomeScreen() {
         setAddOnGameInstalledMap((prev) => ({ ...prev, [selectedAddOnGame.id]: false }));
       });
   }, [selectedAddOnGame?.id, selectedAddOnGame?.package_name]);
+
+  // HTML5 Arcade config for "Earn X pts per level" labels
+  useEffect(() => {
+    api.get('/html5-arcade/config').then((res) => {
+      if (res.data?.success && res.data?.config) setArcadeConfig(res.data.config);
+    }).catch(() => {});
+  }, []);
 
   // Initialize cooldowns
   useEffect(() => {
@@ -785,7 +817,7 @@ export default function HomeScreen() {
           </LinearGradient>
         </TouchableOpacity>
 
-        {/* Arcade – Stickman Hook & Red Ball 4 (like mini games) */}
+        {/* Arcade – Stickman Hook, Bubble Tower 3D, Om Nom Bounce, Stack Ball */}
         <Text style={[styles.sectionLabel, { color: theme.textSecondary }]}>ARCADE</Text>
         <View style={styles.gamesGrid}>
           <TouchableOpacity
@@ -793,6 +825,18 @@ export default function HomeScreen() {
             style={[styles.gameCard, { backgroundColor: theme.card, borderColor: theme.primary }]}
             onPress={() => (navigation as any).navigate('HTML5Game', { title: 'Stickman Hook', url: HTML5_GAME_URL })}
           >
+            <Animated.View style={[{ transform: [{ scale: arcadeLabelScale }], opacity: arcadeLabelOpacity }, styles.arcadeEarnBadgeWrap]}>
+              <LinearGradient
+                colors={[theme.primary + '22', theme.primary + '12']}
+                style={[styles.arcadeEarnBadge, { borderColor: theme.primary + '44' }]}
+              >
+                <Text style={styles.arcadeEarnBadgeIcon}>⭐</Text>
+                <Text style={[styles.arcadeEarnPoints, { color: theme.primary }]}>
+                  {arcadeConfig.stickman_hook?.points_per_level ?? '—'} pts
+                </Text>
+                <Text style={[styles.arcadeEarnPerLevel, { color: theme.textSecondary }]}>per level</Text>
+              </LinearGradient>
+            </Animated.View>
             <LinearGradient colors={[theme.card, theme.background]} style={styles.gameIconBg}>
               <Image source={{ uri: 'https://networks11.com/public/games/stickmanhook/logo.jpg' }} style={styles.arcadeGridIcon} resizeMode="contain" />
             </LinearGradient>
@@ -802,13 +846,71 @@ export default function HomeScreen() {
           <TouchableOpacity
             activeOpacity={0.8}
             style={[styles.gameCard, { backgroundColor: theme.card, borderColor: theme.primary }]}
-            onPress={() => (navigation as any).navigate('HTML5Game', { title: 'Red Ball 4', url: HTML5_GAME_RED_BALL_4_URL, forceLandscape: true })}
+            onPress={() => (navigation as any).navigate('HTML5Game', { title: 'Bubble Tower 3D', url: HTML5_GAME_BUBBLE_TOWER_3D_URL, forcePortrait: true })}
           >
+            <Animated.View style={[{ transform: [{ scale: arcadeLabelScale }], opacity: arcadeLabelOpacity }, styles.arcadeEarnBadgeWrap]}>
+              <LinearGradient
+                colors={[theme.primary + '22', theme.primary + '12']}
+                style={[styles.arcadeEarnBadge, { borderColor: theme.primary + '44' }]}
+              >
+                <Text style={styles.arcadeEarnBadgeIcon}>⭐</Text>
+                <Text style={[styles.arcadeEarnPoints, { color: theme.primary }]}>
+                  {arcadeConfig.bubble_tower_3d?.points_per_level ?? '—'} pts
+                </Text>
+                <Text style={[styles.arcadeEarnPerLevel, { color: theme.textSecondary }]}>per level</Text>
+              </LinearGradient>
+            </Animated.View>
             <LinearGradient colors={[theme.card, theme.background]} style={styles.gameIconBg}>
-              <Image source={{ uri: 'https://networks11.com/public/games/redball4/icon-256.png' }} style={styles.arcadeGridIcon} resizeMode="contain" />
+              <Image source={{ uri: 'https://play.famobi.com/favicon.ico' }} style={styles.arcadeGridIcon} resizeMode="contain" />
             </LinearGradient>
-            <Text style={[styles.gameName, { color: theme.text }]}>Red Ball 4</Text>
-            <Text style={[styles.cooldownText, { color: theme.textSecondary }]}>Roll to victory!</Text>
+            <Text style={[styles.gameName, { color: theme.text }]}>Bubble Tower 3D</Text>
+            <Text style={[styles.cooldownText, { color: theme.textSecondary }]}>Pop bubbles, build up!</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={[styles.gameCard, { backgroundColor: theme.card, borderColor: theme.primary }]}
+            onPress={() => (navigation as any).navigate('HTML5Game', { title: 'Om Nom Bounce', url: HTML5_GAME_OMNOMBOUNCE_URL })}
+          >
+            <Animated.View style={[{ transform: [{ scale: arcadeLabelScale }], opacity: arcadeLabelOpacity }, styles.arcadeEarnBadgeWrap]}>
+              <LinearGradient
+                colors={[theme.primary + '22', theme.primary + '12']}
+                style={[styles.arcadeEarnBadge, { borderColor: theme.primary + '44' }]}
+              >
+                <Text style={styles.arcadeEarnBadgeIcon}>⭐</Text>
+                <Text style={[styles.arcadeEarnPoints, { color: theme.primary }]}>
+                  {arcadeConfig.omnombounce?.points_per_level ?? '—'} pts
+                </Text>
+                <Text style={[styles.arcadeEarnPerLevel, { color: theme.textSecondary }]}>per level</Text>
+              </LinearGradient>
+            </Animated.View>
+            <LinearGradient colors={[theme.card, theme.background]} style={styles.gameIconBg}>
+              <Image source={{ uri: 'https://networks11.com/public/games/omnombounce/assets/icon.jpeg' }} style={styles.arcadeGridIcon} resizeMode="contain" />
+            </LinearGradient>
+            <Text style={[styles.gameName, { color: theme.text }]}>Om Nom Bounce</Text>
+            <Text style={[styles.cooldownText, { color: theme.textSecondary }]}>Bounce to clear levels!</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={[styles.gameCard, { backgroundColor: theme.card, borderColor: theme.primary }]}
+            onPress={() => (navigation as any).navigate('HTML5Game', { title: 'Stack Ball', url: HTML5_GAME_STACKBALL_URL, forcePortrait: true })}
+          >
+            <Animated.View style={[{ transform: [{ scale: arcadeLabelScale }], opacity: arcadeLabelOpacity }, styles.arcadeEarnBadgeWrap]}>
+              <LinearGradient
+                colors={[theme.primary + '22', theme.primary + '12']}
+                style={[styles.arcadeEarnBadge, { borderColor: theme.primary + '44' }]}
+              >
+                <Text style={styles.arcadeEarnBadgeIcon}>⭐</Text>
+                <Text style={[styles.arcadeEarnPoints, { color: theme.primary }]}>
+                  {arcadeConfig.stackball?.points_per_level ?? '—'} pts
+                </Text>
+                <Text style={[styles.arcadeEarnPerLevel, { color: theme.textSecondary }]}>per level</Text>
+              </LinearGradient>
+            </Animated.View>
+            <LinearGradient colors={[theme.card, theme.background]} style={styles.gameIconBg}>
+              <Image source={{ uri: 'https://networks11.com/public/games/stackball/logo.png' }} style={styles.arcadeGridIcon} resizeMode="contain" />
+            </LinearGradient>
+            <Text style={[styles.gameName, { color: theme.text }]}>Stack Ball</Text>
+            <Text style={[styles.cooldownText, { color: theme.textSecondary }]}>Smash through the stack!</Text>
           </TouchableOpacity>
         </View>
 
@@ -1084,6 +1186,37 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 12,
+  },
+  arcadeEarnLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 2,
+  },
+  arcadeEarnBadgeWrap: {
+    marginBottom: 4,
+    alignSelf: 'center',
+  },
+  arcadeEarnBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    gap: 4,
+  },
+  arcadeEarnBadgeIcon: {
+    fontSize: 12,
+  },
+  arcadeEarnPoints: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  arcadeEarnPerLevel: {
+    fontSize: 10,
+    fontWeight: '600',
   },
   offerwallTitle: {
     fontSize: typography.xl,

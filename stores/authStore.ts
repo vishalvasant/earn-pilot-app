@@ -228,14 +228,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         throw fetchError;
       }
     } catch (error: any) {
-      console.error('Google Sign-In error details:', {
-        message: error.message,
-        code: error.code,
-        stack: error.stack
-      });
-      set({ 
-        error: error.message || 'Failed to sign in with Google',
-        isLoading: false 
+      const code = String(error?.code ?? '');
+      const msg = String(error?.message ?? '');
+      const isDeveloperError = code === '10' || msg.includes('DEVELOPER_ERROR');
+      if (isDeveloperError) {
+        console.warn(
+          'Google Sign-In unavailable: add debug SHA-1 to Firebase and verify GOOGLE_WEB_CLIENT_ID (use email login meanwhile).'
+        );
+        const friendly =
+          'Google Sign-In is not configured for this build. Use email/password or fix Firebase (SHA-1 + Web Client ID).';
+        set({ error: friendly, isLoading: false });
+        throw new Error(friendly);
+      }
+      console.warn('Google Sign-In error:', msg || error);
+      set({
+        error: msg || 'Failed to sign in with Google',
+        isLoading: false,
       });
       throw error;
     }

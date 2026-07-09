@@ -9,6 +9,7 @@
     "android": "react-native run-android",
     "ios": "react-native run-ios",
     "build:apk": "cd android && ./gradlew assembleRelease && cd ..",
+    "build:apk:debug:standalone": "mkdir -p android/app/src/main/assets dist && npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res --reset-cache && cd android && ./gradlew assembleDebug --no-build-cache --rerun-tasks && cd .. && cp android/app/build/outputs/apk/debug/app-debug.apk dist/earn-pilot-debug-standalone.apk",
     "serve:game": "npx --yes serve games/cuttherope -p 8080",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
